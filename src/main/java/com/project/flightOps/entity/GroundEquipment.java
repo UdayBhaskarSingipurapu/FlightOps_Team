@@ -1,37 +1,32 @@
 package com.project.flightOps.entity;
 
-import com.project.flightOps.enums.Role;
-import com.project.flightOps.enums.UserStatus;
+import com.project.flightOps.enums.EquipmentStatus;
+import com.project.flightOps.enums.EquipmentType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "users")
+@Table(name = "ground_equipment")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
-
+public class GroundEquipment {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String userId;
-
-    @Column(nullable = false)
-    private String name;
+    private String equipmentId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role;
+    private EquipmentType type;
 
     @Column(nullable = false, unique = true)
-    private String email;
+    private String registrationNumber;
 
-    private String phone;
-    private String airportId;
+    private String currentLocation;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserStatus status;
+    private EquipmentStatus status;
 }
