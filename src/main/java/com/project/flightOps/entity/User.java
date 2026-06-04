@@ -4,6 +4,7 @@ import com.project.flightOps.enums.Role;
 import com.project.flightOps.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -12,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class User {
 
     @Id
@@ -21,6 +23,9 @@ public class User {
     @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
+    private String password;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
@@ -29,6 +34,7 @@ public class User {
     private String email;
 
     private String phone;
+    @Column(nullable = false)
     private String airportId;
 
     @Enumerated(EnumType.STRING)
