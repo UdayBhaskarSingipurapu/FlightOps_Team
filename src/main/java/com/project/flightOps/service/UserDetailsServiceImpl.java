@@ -1,8 +1,8 @@
-package com.project.flightOps.security.service;
+package com.project.flightOps.service;
 
 import com.project.flightOps.entity.User;
 import com.project.flightOps.repository.UserRepository;
-import com.project.flightOps.security.UserPrincipal;
+import com.project.flightOps.util.UserPrincipal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

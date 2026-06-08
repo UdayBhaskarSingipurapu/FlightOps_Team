@@ -1,8 +1,7 @@
-package com.project.flightOps.security;
+package com.project.flightOps.config;
 
-import com.project.flightOps.security.filter.JwtAuthFilter;
-import com.project.flightOps.security.handler.JwtAccessDeniedHandler;
-import com.project.flightOps.security.handler.JwtAuthEntryPoint;
+import com.project.flightOps.util.JwtAccessDeniedHandler;
+import com.project.flightOps.util.JwtAuthEntryPoint;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

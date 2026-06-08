@@ -1,4 +1,4 @@
-package com.project.flightOps.security.jwt;
+package com.project.flightOps.service;
 
 import com.project.flightOps.config.JwtProperties;
 import com.project.flightOps.enums.Role;

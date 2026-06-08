@@ -1,6 +1,6 @@
-package com.project.flightOps.security.filter;
+package com.project.flightOps.config;
 
-import com.project.flightOps.security.jwt.JwtService;
+import com.project.flightOps.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
