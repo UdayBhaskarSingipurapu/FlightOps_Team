@@ -138,9 +138,14 @@ public class SecurityConfig {
 
                         // ── Module 8: Notifications (each user sees only their own) ───
                         .requestMatchers("/api/notifications/**").authenticated()
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
 
                         // Deny everything else by default
-                        .anyRequest().denyAll()
+                        .anyRequest().authenticated()
                 )
 
                 .authenticationProvider(authenticationProvider())
