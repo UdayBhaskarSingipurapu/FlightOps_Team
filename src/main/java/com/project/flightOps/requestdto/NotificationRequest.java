@@ -17,4 +17,3 @@ public class NotificationRequest {
     @NotNull(message = "Category is required")
     private NotificationCategory category;
 }
-

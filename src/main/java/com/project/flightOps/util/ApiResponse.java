@@ -1,32 +1,35 @@
 package com.project.flightOps.util;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-@Builder
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.Getter;
+
+import java.time.LocalDateTime;
+
+@Getter
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
 
-    private int statusCode;
-    private String responseMessage;
-    private T data;
+    private final boolean success;
+    private final String message;
+    private final T data;
+    private final LocalDateTime timestamp;
 
-    public static <T> ApiResponse<T> success(String message, T data) {
-        return ApiResponse.<T>builder()
-                .statusCode(200)
-                .responseMessage(message)
-                .data(data)
-                .build();
+    private ApiResponse(boolean success, String message, T data) {
+        this.success = success;
+        this.message = message;
+        this.data = data;
+        this.timestamp = LocalDateTime.now();
     }
 
-    public static <T> ApiResponse<T> error(int code, String message) {
-        return ApiResponse.<T>builder()
-                .statusCode(code)
-                .responseMessage(message)
-                .data(null)
-                .build();
+    public static <T> ApiResponse<T> success(String message, T data) {
+        return new ApiResponse<>(true, message, data);
+    }
+
+    public static <T> ApiResponse<T> success(String message) {
+        return new ApiResponse<>(true, message, null);
+    }
+
+    public static <T> ApiResponse<T> error(String message) {
+        return new ApiResponse<>(false, message, null);
     }
 }
