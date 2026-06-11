@@ -7,6 +7,7 @@ import com.project.flightOps.service.HandlingRequestService;
 import com.project.flightOps.util.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // Added for logging
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/handling-requests")
 @RequiredArgsConstructor
+@Slf4j // Enables the 'log' object automatically via Lombok
 public class HandlingRequestController {
 
     private final HandlingRequestService handlingRequestService;
@@ -28,9 +30,14 @@ public class HandlingRequestController {
     public ResponseEntity<ApiResponse<HandlingRequestResponse>> create(
             @Valid @RequestBody HandlingRequestDto dto,
             @AuthenticationPrincipal UserDetails userDetails) {
+        log.info("Received request to submit a new handling request by user: {}", userDetails.getUsername());
+        log.debug("Handling request payload: {}", dto);
+
+        HandlingRequestResponse response = handlingRequestService.create(dto, userDetails.getUsername());
+
+        log.info("Successfully submitted handling request");
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Handling request submitted",
-                        handlingRequestService.create(dto, userDetails.getUsername())));
+                .body(ApiResponse.success("Handling request submitted", response));
     }
 
     // GET /api/handling-requests?airline=AI for coordinator; no param = all for supervisor
@@ -38,31 +45,48 @@ public class HandlingRequestController {
     @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSupervisor', 'Admin')")
     public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getAll(
             @RequestParam(required = false) String airline) {
+        if (airline != null) {
+            log.info("Fetching handling requests filtered by airline: {}", airline);
+        } else {
+            log.info("Fetching all handling requests");
+        }
+
         List<HandlingRequestResponse> result = (airline != null)
                 ? handlingRequestService.getByAirline(airline)
                 : handlingRequestService.getAll();
+
+        log.info("Successfully fetched {} handling requests", result.size());
         return ResponseEntity.ok(ApiResponse.success("Handling requests fetched", result));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSupervisor', 'Admin')")
     public ResponseEntity<ApiResponse<HandlingRequestResponse>> getById(@PathVariable String id) {
-        return ResponseEntity.ok(ApiResponse.success("Handling request fetched",
-                handlingRequestService.getById(id)));
+        log.info("Fetching handling request details for ID: {}", id);
+        HandlingRequestResponse response = handlingRequestService.getById(id);
+        log.info("Successfully fetched handling request details for ID: {}", id);
+        return ResponseEntity.ok(ApiResponse.success("Handling request fetched", response));
     }
 
     @GetMapping("/flight/{flightId}")
     public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByFlight(
             @PathVariable String flightId) {
-        return ResponseEntity.ok(ApiResponse.success("Handling requests for flight fetched",
-                handlingRequestService.getByFlight(flightId)));
+        log.info("Fetching handling requests for flight ID: {}", flightId);
+        List<HandlingRequestResponse> response = handlingRequestService.getByFlight(flightId);
+        log.info("Successfully fetched {} handling requests for flight ID: {}", response.size(), flightId);
+        return ResponseEntity.ok(ApiResponse.success("Handling requests for flight fetched", response));
     }
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('GroundSupervisor')")
     public ResponseEntity<ApiResponse<HandlingRequestResponse>> updateStatus(
             @PathVariable String id, @Valid @RequestBody HandlingStatusRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Status updated",
-                handlingRequestService.updateStatus(id, request)));
+        log.info("Received request to update status for handling request ID: {}", id);
+        log.debug("Handling status update payload: {}", request);
+
+        HandlingRequestResponse response = handlingRequestService.updateStatus(id, request);
+
+        log.info("Successfully updated status for handling request ID: {}", id);
+        return ResponseEntity.ok(ApiResponse.success("Status updated", response));
     }
 }

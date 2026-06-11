@@ -16,12 +16,14 @@ import com.project.flightOps.requestdto.HandlingStatusRequest;
 import com.project.flightOps.responsedto.HandlingRequestResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // 1. Added SLF4J import
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j // 2. Added Lombok annotation to auto-generate the 'log' variable
 public class HandlingRequestService {
 
     private final HandlingRequestRepository handlingRequestRepository;
@@ -31,18 +33,24 @@ public class HandlingRequestService {
 
     @Transactional
     public HandlingRequestResponse create(HandlingRequestDto dto, String requestedByUserId) {
+        log.info("Initiating creation of handling request for flightId: {} by user: {}", dto.getFlightId(), requestedByUserId);
+
         Flight flight = flightService.findById(dto.getFlightId());
 
         // Prevent duplicate active request for same flight
         boolean exists = handlingRequestRepository.existsByFlightAndStatusNot(
                 flight, RequestStatus.Disputed);
         if (exists) {
+            log.warn("Conflict detected: Active handling request already exists for flight number: {}", flight.getFlightNumber());
             throw new ConflictException("A handling request already exists for flight: "
                     + flight.getFlightNumber());
         }
 
         User requestedBy = userRepository.findById(requestedByUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> {
+                    log.error("Failed to create handling request. User not found: {}", requestedByUserId);
+                    return new ResourceNotFoundException("User not found");
+                });
 
         HandlingRequest request = new HandlingRequest();
         request.setFlight(flight);
@@ -53,8 +61,10 @@ public class HandlingRequestService {
         request.setStatus(RequestStatus.Received);
 
         HandlingRequest saved = handlingRequestRepository.save(request);
+        log.info("Handling request successfully created with ID: {} for flight: {}", saved.getRequestId(), flight.getFlightNumber());
 
         // Notify supervisors
+        log.debug("Dispatching notifications to Ground Supervisors for new request: {}", saved.getRequestId());
         userRepository.findByRole(Role.GroundSupervisor).forEach(u ->
                 notificationService.sendNotification(u.getUserId(),
                         "New handling request received for flight " + flight.getFlightNumber(),
@@ -64,36 +74,46 @@ public class HandlingRequestService {
     }
 
     public List<HandlingRequestResponse> getAll() {
+        log.debug("Fetching all handling requests");
         return handlingRequestRepository.findAll().stream().map(this::toResponse).toList();
     }
 
     public List<HandlingRequestResponse> getByAirline(String airlineId) {
+        log.debug("Fetching handling requests for airline ID: {}", airlineId);
         return handlingRequestRepository.findByAirlineIdOrderByStatusAsc(airlineId)
                 .stream().map(this::toResponse).toList();
     }
 
     public HandlingRequestResponse getById(String requestId) {
+        log.debug("Fetching handling request details for ID: {}", requestId);
         return toResponse(findById(requestId));
     }
 
     public List<HandlingRequestResponse> getByFlight(String flightId) {
+        log.debug("Fetching handling requests for flight ID: {}", flightId);
         return handlingRequestRepository.findByFlight_FlightId(flightId)
                 .stream().map(this::toResponse).toList();
     }
 
     @Transactional
     public HandlingRequestResponse updateStatus(String requestId, HandlingStatusRequest statusRequest) {
+        log.info("Attempting to update status of request ID: {} to {}", requestId, statusRequest.getStatus());
+
         HandlingRequest request = findById(requestId);
 
         // Guard: can't re-confirm a completed request
         if (request.getStatus() == RequestStatus.Completed) {
+            log.warn("Invalid operation: Attempted to modify completed handling request ID: {}", requestId);
             throw new BadRequestException("Cannot modify a completed handling request");
         }
 
+        RequestStatus oldStatus = request.getStatus();
         request.setStatus(statusRequest.getStatus());
         HandlingRequest saved = handlingRequestRepository.save(request);
+        log.info("Successfully updated request ID: {} status from {} to {}", requestId, oldStatus, saved.getStatus());
 
         // Notify coordinator about confirmation/rejection
+        log.debug("Notifying coordinator (User ID: {}) regarding status update to {}", saved.getRequestedBy().getUserId(), saved.getStatus());
         notificationService.sendNotification(
                 saved.getRequestedBy().getUserId(),
                 "Your handling request for flight " + saved.getFlight().getFlightNumber()
@@ -105,7 +125,10 @@ public class HandlingRequestService {
 
     private HandlingRequest findById(String id) {
         return handlingRequestRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Handling request not found: " + id));
+                .orElseThrow(() -> {
+                    log.error("Resource lookup failed. Handling request with ID: {} not found", id);
+                    return new ResourceNotFoundException("Handling request not found: " + id);
+                });
     }
 
     private HandlingRequestResponse toResponse(HandlingRequest h) {

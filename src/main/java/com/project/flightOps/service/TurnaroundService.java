@@ -17,6 +17,7 @@ import com.project.flightOps.responsedto.TurnaroundMilestoneResponse;
 import com.project.flightOps.responsedto.TurnaroundPlanResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // Added SLF4J Annotation
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j // Enables the 'log' instance variable automatically
 @Service
 @RequiredArgsConstructor
 public class TurnaroundService {
@@ -52,15 +54,20 @@ public class TurnaroundService {
 
     @Transactional
     public TurnaroundPlanResponse createPlan(TurnaroundPlanRequest request, String supervisorId) {
+        log.info("Attempting to create turnaround plan for flightId: {} by supervisorId: {}", request.getFlightId(), supervisorId);
         Flight flight = flightService.findById(request.getFlightId());
 
         if (planRepository.existsByFlight(flight)) {
+            log.warn("Conflict detected: A turnaround plan already exists for flight: {}", flight.getFlightNumber());
             throw new ConflictException("A turnaround plan already exists for flight: "
                     + flight.getFlightNumber());
         }
 
         User supervisor = userRepository.findById(supervisorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Supervisor not found"));
+                .orElseThrow(() -> {
+                    log.error("Failed to create plan: Supervisor not found with ID: {}", supervisorId);
+                    return new ResourceNotFoundException("Supervisor not found");
+                });
 
         TurnaroundPlan plan = new TurnaroundPlan();
         plan.setFlight(flight);
@@ -69,6 +76,7 @@ public class TurnaroundService {
         plan.setStatus(TurnaroundStatus.Active);
 
         TurnaroundPlan savedPlan = planRepository.save(plan);
+        log.debug("Turnaround plan entity saved with ID: {}", savedPlan.getPlanId());
 
         // Auto-generate all 10 milestones with planned times based on scheduled arrival
         List<TurnaroundMilestone> milestones = new ArrayList<>();
@@ -82,6 +90,7 @@ public class TurnaroundService {
             milestones.add(milestone);
         }
         milestoneRepository.saveAll(milestones);
+        log.info("Successfully generated {} milestones for flight: {}", milestones.size(), flight.getFlightNumber());
 
         // Notify ramp officers
         userRepository.findByRole(Role.RampOfficer).forEach(u ->
@@ -93,6 +102,7 @@ public class TurnaroundService {
     }
 
     public List<TurnaroundPlanResponse> getActive() {
+        log.debug("Fetching all active turnaround plans");
         return planRepository.findByStatusOrderByStatusAsc(TurnaroundStatus.Active)
                 .stream().map(p -> toResponse(p,
                         milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(p)))
@@ -100,6 +110,7 @@ public class TurnaroundService {
     }
 
     public List<TurnaroundPlanResponse> getAll() {
+        log.debug("Fetching all turnaround plans");
         return planRepository.findAll().stream()
                 .map(p -> toResponse(p,
                         milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(p)))
@@ -107,21 +118,28 @@ public class TurnaroundService {
     }
 
     public TurnaroundPlanResponse getById(String planId) {
+        log.debug("Fetching turnaround plan by ID: {}", planId);
         TurnaroundPlan plan = findPlanById(planId);
         return toResponse(plan, milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(plan));
     }
 
     public TurnaroundPlanResponse getByFlight(String flightId) {
+        log.debug("Fetching turnaround plan for flight ID: {}", flightId);
         TurnaroundPlan plan = planRepository.findByFlight_FlightId(flightId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No turnaround plan found for flight: " + flightId));
+                .orElseThrow(() -> {
+                    log.warn("Turnaround plan query failed: No plan found for flight ID: {}", flightId);
+                    return new ResourceNotFoundException("No turnaround plan found for flight: " + flightId);
+                });
         return toResponse(plan, milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(plan));
     }
 
     @Transactional
     public TurnaroundPlanResponse completePlan(String planId) {
+        log.info("Attempting to complete turnaround plan ID: {}", planId);
         TurnaroundPlan plan = findPlanById(planId);
+
         if (plan.getStatus() == TurnaroundStatus.Completed) {
+            log.warn("Bad Request: Turnaround plan {} is already in Completed state", planId);
             throw new BadRequestException("Turnaround plan is already completed");
         }
 
@@ -140,11 +158,16 @@ public class TurnaroundService {
                 .findFirst().orElse(null);
 
         if (chocksOnActual != null && pushbackActual != null) {
-            plan.setActualTurnaroundMinutes(
-                    (int) ChronoUnit.MINUTES.between(chocksOnActual, pushbackActual));
+            int calculatedMinutes = (int) ChronoUnit.MINUTES.between(chocksOnActual, pushbackActual);
+            plan.setActualTurnaroundMinutes(calculatedMinutes);
+            log.debug("Calculated actual turnaround time for plan {}: {} minutes", planId, calculatedMinutes);
+        } else {
+            log.warn("Could not calculate precise turnaround duration for plan {} because ChocksOn or PushbackClearance actual times were missing", planId);
         }
+
         plan.setStatus(TurnaroundStatus.Completed);
         TurnaroundPlan saved = planRepository.save(plan);
+        log.info("Turnaround plan for flight {} successfully marked as COMPLETED", plan.getFlight().getFlightNumber());
 
         // Notify coordinator
         notificationService.sendNotification(
@@ -157,21 +180,27 @@ public class TurnaroundService {
 
     // Milestone operations
     public List<TurnaroundMilestoneResponse> getMilestonesByPlan(String planId) {
+        log.debug("Fetching milestones for plan ID: {}", planId);
         return milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(planId)
                 .stream().map(this::toMilestoneResponse).toList();
     }
 
     @Transactional
     public TurnaroundMilestoneResponse completeMilestone(String milestoneId,
-            MilestoneCompleteRequest request, String completedByUserId) {
+                                                         MilestoneCompleteRequest request, String completedByUserId) {
+        log.info("User {} attempting to complete milestone ID: {} at actual time: {}", completedByUserId, milestoneId, request.getActualTime());
         TurnaroundMilestone milestone = findMilestoneById(milestoneId);
 
         if (milestone.getStatus() == MilestoneStatus.Completed) {
+            log.warn("Bad Request: Milestone ID {} is already marked as Completed", milestoneId);
             throw new BadRequestException("Milestone is already completed");
         }
 
         User completedBy = userRepository.findById(completedByUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> {
+                    log.error("Milestone completion failed: User {} not found", completedByUserId);
+                    return new ResourceNotFoundException("User not found");
+                });
 
         milestone.setActualTime(request.getActualTime());
         milestone.setCompletedBy(completedBy);
@@ -181,32 +210,42 @@ public class TurnaroundService {
         milestone.setStatus(delayed ? MilestoneStatus.Delayed : MilestoneStatus.Completed);
 
         TurnaroundMilestone saved = milestoneRepository.save(milestone);
+        TurnaroundPlan plan = milestone.getTurnaroundPlan();
 
         if (delayed) {
             long delayMinutes = ChronoUnit.MINUTES.between(
                     milestone.getPlannedTime(), request.getActualTime());
+
+            log.warn("SLA BREACH: Milestone {} for flight {} completed late by {} minutes",
+                    milestone.getMilestoneType(), plan.getFlight().getFlightNumber(), delayMinutes);
+
             // Notify supervisor of SLA breach
-            TurnaroundPlan plan = milestone.getTurnaroundPlan();
             notificationService.sendNotification(
                     plan.getSupervisor().getUserId(),
                     "SLA breach: " + milestone.getMilestoneType() + " for flight "
                             + plan.getFlight().getFlightNumber()
                             + " is " + delayMinutes + " min late",
                     NotificationCategory.Turnaround);
+
             // Update plan status to Delayed
             plan.setStatus(TurnaroundStatus.Delayed);
             planRepository.save(plan);
+        } else {
+            log.info("Milestone {} for flight {} successfully completed on schedule",
+                    milestone.getMilestoneType(), plan.getFlight().getFlightNumber());
         }
 
         return toMilestoneResponse(saved);
     }
 
     public List<TurnaroundMilestoneResponse> getDelayedMilestones() {
+        log.debug("Fetching all currently delayed milestones");
         return milestoneRepository.findByStatusOrderByPlannedTimeAsc(MilestoneStatus.Delayed)
                 .stream().map(this::toMilestoneResponse).toList();
     }
 
     public TurnaroundMilestoneResponse getMilestoneById(String milestoneId) {
+        log.debug("Fetching milestone by ID: {}", milestoneId);
         return toMilestoneResponse(findMilestoneById(milestoneId));
     }
 
@@ -214,12 +253,22 @@ public class TurnaroundService {
     @Scheduled(fixedDelay = 120_000)
     @Transactional
     public void checkOverdueMilestones() {
-        List<TurnaroundMilestone> overdue =
-                milestoneRepository.findOverdueMilestones(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        log.trace("Scheduled check for overdue milestones executing at {}", now);
+
+        List<TurnaroundMilestone> overdue = milestoneRepository.findOverdueMilestones(now);
+
+        if (!overdue.isEmpty()) {
+            log.warn("Scheduled job detected {} overdue pending milestones", overdue.size());
+        }
+
         overdue.forEach(milestone -> {
             TurnaroundPlan plan = milestone.getTurnaroundPlan();
-            long minutesLate = ChronoUnit.MINUTES.between(
-                    milestone.getPlannedTime(), LocalDateTime.now());
+            long minutesLate = ChronoUnit.MINUTES.between(milestone.getPlannedTime(), now);
+
+            log.warn("ALERT: Milestone {} for flight {} is overdue by {} minutes!",
+                    milestone.getMilestoneType(), plan.getFlight().getFlightNumber(), minutesLate);
+
             notificationService.sendNotification(
                     plan.getSupervisor().getUserId(),
                     "OVERDUE: " + milestone.getMilestoneType() + " for flight "
@@ -231,12 +280,18 @@ public class TurnaroundService {
 
     private TurnaroundPlan findPlanById(String id) {
         return planRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Turnaround plan not found: " + id));
+                .orElseThrow(() -> {
+                    log.warn("Entity look up failed: Turnaround plan not found for ID: {}", id);
+                    return new ResourceNotFoundException("Turnaround plan not found: " + id);
+                });
     }
 
     private TurnaroundMilestone findMilestoneById(String id) {
         return milestoneRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found: " + id));
+                .orElseThrow(() -> {
+                    log.warn("Entity look up failed: Milestone not found for ID: {}", id);
+                    return new ResourceNotFoundException("Milestone not found: " + id);
+                });
     }
 
     private TurnaroundPlanResponse toResponse(TurnaroundPlan p, List<TurnaroundMilestone> milestones) {

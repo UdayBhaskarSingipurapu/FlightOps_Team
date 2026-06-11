@@ -11,6 +11,7 @@ import com.project.flightOps.responsedto.DashboardMetricsResponse;
 import com.project.flightOps.responsedto.GroundOpsReportResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // Added for logger
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j // Injects `log` instance automatically via Lombok
 @Service
 @RequiredArgsConstructor
 public class AnalyticsService {
@@ -36,6 +38,8 @@ public class AnalyticsService {
     // GET /api/metrics/dashboard — today's live KPIs
     public DashboardMetricsResponse getDashboard() {
         LocalDate today = LocalDate.now();
+        log.info("Fetching real-time dashboard metrics for date: {}", today);
+
         LocalDateTime startOfDay = today.atStartOfDay();
         LocalDateTime endOfDay = today.atTime(23, 59, 59);
 
@@ -57,6 +61,7 @@ public class AnalyticsService {
                 .average().orElse(0.0);
 
         double onTimeRate = total > 0 ? (onTime * 100.0 / total) : 0.0;
+        log.debug("Turnaround calculations completed. Total: {}, On-Time: {}, Delayed: {}", total, onTime, delayed);
 
         // GSE utilisation
         long totalEquip = equipmentRepository.count();
@@ -85,6 +90,8 @@ public class AnalyticsService {
         long flightsHandled = flightRepository
                 .findByScheduledArrivalBetweenOrderByScheduledArrivalAsc(startOfDay, endOfDay).size();
 
+        log.info("Successfully compiled dashboard metrics. Flights handled: {}, SLA breaches: {}", flightsHandled, slaBreaches);
+
         return DashboardMetricsResponse.builder()
                 .date(today)
                 .totalFlightsHandled((int) flightsHandled)
@@ -106,6 +113,7 @@ public class AnalyticsService {
 
     // GET /api/metrics/on-time-rate
     public Map<String, Object> getOnTimeRate() {
+        log.info("Calculating On-Time Performance (OTP) rate...");
         var allPlans = turnaroundPlanRepository.findAll();
         long total = allPlans.size();
         long onTime = allPlans.stream()
@@ -115,6 +123,8 @@ public class AnalyticsService {
                         && p.getActualTurnaroundMinutes() <= p.getTargetTurnaroundMinutes())
                 .count();
         double rate = total > 0 ? (onTime * 100.0 / total) : 0.0;
+
+        log.info("OTP generation finished. Rate: {}%", Math.round(rate * 10.0) / 10.0);
         return Map.of(
                 "totalTurnarounds", total,
                 "onTimeTurnarounds", onTime,
@@ -124,6 +134,7 @@ public class AnalyticsService {
 
     // GET /api/reports/turnaround
     public Map<String, Object> getTurnaroundReport() {
+        log.info("Generating full Turnaround operational report...");
         var plans = turnaroundPlanRepository.findAll();
         long completed = plans.stream()
                 .filter(p -> p.getStatus() == TurnaroundStatus.Completed).count();
@@ -135,6 +146,7 @@ public class AnalyticsService {
                 .filter(p -> p.getActualTurnaroundMinutes() != null)
                 .mapToInt(p -> p.getActualTurnaroundMinutes())
                 .average().orElse(0.0);
+
         return Map.of(
                 "total", plans.size(),
                 "completed", completed,
@@ -146,12 +158,14 @@ public class AnalyticsService {
 
     // GET /api/reports/gse-utilisation
     public Map<String, Object> getGseUtilisationReport() {
+        log.info("Generating Ground Support Equipment (GSE) utilization report...");
         long total = equipmentRepository.count();
         long available = equipmentRepository.findByStatus(EquipmentStatus.Available).size();
         long allocated = equipmentRepository.findByStatus(EquipmentStatus.Allocated).size();
         long maintenance = equipmentRepository.findByStatus(EquipmentStatus.Maintenance).size();
         long outOfService = equipmentRepository.findByStatus(EquipmentStatus.OutOfService).size();
         double utilRate = total > 0 ? (allocated * 100.0 / total) : 0.0;
+
         return Map.of(
                 "totalEquipment", total,
                 "available", available,
@@ -164,6 +178,7 @@ public class AnalyticsService {
 
     // GET /api/reports/baggage
     public Map<String, Object> getBaggageReport() {
+        log.info("Generating Baggage operations report...");
         var allOps = baggageOperationRepository.findAll();
         long discrepancy = allOps.stream()
                 .filter(op -> op.getStatus() == OperationStatus.Discrepancy).count();
@@ -171,6 +186,7 @@ public class AnalyticsService {
                 .filter(op -> op.getStatus() == OperationStatus.Completed).count();
         long mishandled = mishandledBaggageRepository.count();
         double discRate = allOps.isEmpty() ? 0.0 : (discrepancy * 100.0 / allOps.size());
+
         return Map.of(
                 "totalOperations", allOps.size(),
                 "completedOperations", completed,
@@ -182,12 +198,16 @@ public class AnalyticsService {
 
     // GET /api/reports/sla-breaches
     public Map<String, Object> getSlaBreachReport() {
+        LocalDateTime now = LocalDateTime.now();
+        log.info("Evaluating SLA breaches up to timestamp: {}", now);
+
         long delayed = milestoneRepository
                 .findByStatusOrderByPlannedTimeAsc(MilestoneStatus.Delayed).size();
         long pending = milestoneRepository
                 .findByStatusOrderByPlannedTimeAsc(MilestoneStatus.Pending).size();
         long overdue = milestoneRepository
-                .findOverdueMilestones(LocalDateTime.now()).size();
+                .findOverdueMilestones(now).size();
+
         return Map.of(
                 "completedOnTime", milestoneRepository
                         .findByStatusOrderByPlannedTimeAsc(MilestoneStatus.Completed).size(),
@@ -201,7 +221,12 @@ public class AnalyticsService {
     // POST /api/reports/generate — saves a snapshot report to DB
     @Transactional
     public GroundOpsReportResponse generateReport(ReportGenerateRequest request) {
+        log.info("Request received to generate snapshot report. Scope: {}, DateRange: {} to {}",
+                request.getScope(), request.getFromDate(), request.getToDate());
+
         if (request.getToDate().isBefore(request.getFromDate())) {
+            log.warn("Report generation validation failed: 'toDate' ({}) is before 'fromDate' ({})",
+                    request.getToDate(), request.getFromDate());
             throw new BadRequestException("To date must be after from date");
         }
 
@@ -211,6 +236,7 @@ public class AnalyticsService {
         try {
             metricsJson = objectMapper.writeValueAsString(metrics);
         } catch (JsonProcessingException e) {
+            log.error("Failed to serialize metrics to JSON string for database snapshot preservation", e);
             metricsJson = "{\"error\": \"Could not serialize metrics\"}";
         }
 
@@ -218,11 +244,15 @@ public class AnalyticsService {
         report.setScope(request.getScope());
         report.setMetrics(metricsJson);
 
-        return toReportResponse(reportRepository.save(report));
+        GroundOpsReport savedReport = reportRepository.save(report);
+        log.info("Successfully generated and preserved ground operations report snapshot with ID: {}", savedReport.getReportId());
+
+        return toReportResponse(savedReport);
     }
 
     // GET /api/reports — list saved reports
     public List<GroundOpsReportResponse> getAllReports() {
+        log.info("Fetching historic list of all saved reports...");
         return reportRepository.findAllByOrderByGeneratedDateDesc()
                 .stream().map(this::toReportResponse).toList();
     }

@@ -8,6 +8,7 @@ import com.project.flightOps.service.TurnaroundService;
 import com.project.flightOps.util.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // 1. Imported Slf4j
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,7 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
+@Slf4j // 2. Added annotation to automatically generate the 'log' field
 public class TurnaroundController {
 
     private final TurnaroundService turnaroundService;
@@ -30,15 +32,19 @@ public class TurnaroundController {
     public ResponseEntity<ApiResponse<TurnaroundPlanResponse>> createPlan(
             @Valid @RequestBody TurnaroundPlanRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
+        log.info("Request received to create turnaround plan by user: {}", userDetails.getUsername());
+
+        TurnaroundPlanResponse response = turnaroundService.createPlan(request, userDetails.getUsername());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Turnaround plan created",
-                        turnaroundService.createPlan(request, userDetails.getUsername())));
+                .body(ApiResponse.success("Turnaround plan created", response));
     }
 
     @GetMapping("/api/turnarounds")
     @PreAuthorize("hasAnyRole('GroundSupervisor', 'RampOfficer', 'Admin', 'AirlineCoordinator')")
     public ResponseEntity<ApiResponse<List<TurnaroundPlanResponse>>> getAll(
             @RequestParam(defaultValue = "false") boolean activeOnly) {
+        log.info("Fetching turnaround plans. Filter activeOnly: {}", activeOnly);
+
         List<TurnaroundPlanResponse> result = activeOnly
                 ? turnaroundService.getActive()
                 : turnaroundService.getAll();
@@ -47,6 +53,7 @@ public class TurnaroundController {
 
     @GetMapping("/api/turnarounds/{id}")
     public ResponseEntity<ApiResponse<TurnaroundPlanResponse>> getById(@PathVariable String id) {
+        log.info("Fetching turnaround plan with ID: {}", id);
         return ResponseEntity.ok(ApiResponse.success("Turnaround plan fetched",
                 turnaroundService.getById(id)));
     }
@@ -54,6 +61,7 @@ public class TurnaroundController {
     @GetMapping("/api/turnarounds/flight/{flightId}")
     public ResponseEntity<ApiResponse<TurnaroundPlanResponse>> getByFlight(
             @PathVariable String flightId) {
+        log.info("Fetching turnaround plan for flight ID: {}", flightId);
         return ResponseEntity.ok(ApiResponse.success("Turnaround plan fetched",
                 turnaroundService.getByFlight(flightId)));
     }
@@ -61,6 +69,7 @@ public class TurnaroundController {
     @PatchMapping("/api/turnarounds/{id}/status")
     @PreAuthorize("hasRole('GroundSupervisor')")
     public ResponseEntity<ApiResponse<TurnaroundPlanResponse>> completePlan(@PathVariable String id) {
+        log.info("Request received to complete turnaround plan ID: {}", id);
         return ResponseEntity.ok(ApiResponse.success("Turnaround completed",
                 turnaroundService.completePlan(id)));
     }
@@ -70,6 +79,7 @@ public class TurnaroundController {
     @GetMapping("/api/milestones/turnaround/{planId}")
     public ResponseEntity<ApiResponse<List<TurnaroundMilestoneResponse>>> getMilestones(
             @PathVariable String planId) {
+        log.info("Fetching milestones for turnaround plan ID: {}", planId);
         return ResponseEntity.ok(ApiResponse.success("Milestones fetched",
                 turnaroundService.getMilestonesByPlan(planId)));
     }
@@ -80,13 +90,16 @@ public class TurnaroundController {
             @PathVariable String id,
             @Valid @RequestBody MilestoneCompleteRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.success("Milestone completed",
-                turnaroundService.completeMilestone(id, request, userDetails.getUsername())));
+        log.info("User {} requested completion for milestone ID: {}", userDetails.getUsername(), id);
+
+        TurnaroundMilestoneResponse response = turnaroundService.completeMilestone(id, request, userDetails.getUsername());
+        return ResponseEntity.ok(ApiResponse.success("Milestone completed", response));
     }
 
     @GetMapping("/api/milestones/delayed")
     @PreAuthorize("hasRole('GroundSupervisor')")
     public ResponseEntity<ApiResponse<List<TurnaroundMilestoneResponse>>> getDelayed() {
+        log.warn("Fetching all delayed milestones for investigation."); // Used warn log level here for potential operational operational risks
         return ResponseEntity.ok(ApiResponse.success("Delayed milestones fetched",
                 turnaroundService.getDelayedMilestones()));
     }
@@ -94,6 +107,7 @@ public class TurnaroundController {
     @GetMapping("/api/milestones/{id}")
     public ResponseEntity<ApiResponse<TurnaroundMilestoneResponse>> getMilestoneById(
             @PathVariable String id) {
+        log.info("Fetching milestone details for ID: {}", id);
         return ResponseEntity.ok(ApiResponse.success("Milestone fetched",
                 turnaroundService.getMilestoneById(id)));
     }

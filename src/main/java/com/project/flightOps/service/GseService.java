@@ -18,10 +18,12 @@ import com.project.flightOps.responsedto.EquipmentMaintenanceResponse;
 import com.project.flightOps.responsedto.GroundEquipmentResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // Added for Logging
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j // Injects the 'log' field automatically via Lombok
 @Service
 @RequiredArgsConstructor
 public class GseService {
@@ -37,7 +39,9 @@ public class GseService {
 
     @Transactional
     public GroundEquipmentResponse registerEquipment(GroundEquipmentRequest request) {
+        log.info("Attempting to register new equipment with registration number: {}", request.getRegistrationNumber());
         if (equipmentRepository.existsByRegistrationNumber(request.getRegistrationNumber())) {
+            log.warn("Registration failed. Equipment already exists: {}", request.getRegistrationNumber());
             throw new ConflictException("Equipment with registration "
                     + request.getRegistrationNumber() + " already exists");
         }
@@ -46,37 +50,52 @@ public class GseService {
         equipment.setRegistrationNumber(request.getRegistrationNumber());
         equipment.setCurrentLocation(request.getCurrentLocation());
         equipment.setStatus(EquipmentStatus.Available);
-        return toEquipmentResponse(equipmentRepository.save(equipment));
+
+        GroundEquipment saved = equipmentRepository.save(equipment);
+        log.info("Successfully registered equipment. ID: {}, Reg: {}", saved.getEquipmentId(), saved.getRegistrationNumber());
+        return toEquipmentResponse(saved);
     }
 
     public List<GroundEquipmentResponse> getAllEquipment() {
+        log.debug("Fetching all ground equipment");
         return equipmentRepository.findAll().stream().map(this::toEquipmentResponse).toList();
     }
 
     public GroundEquipmentResponse getEquipmentById(String id) {
+        log.debug("Fetching equipment by ID: {}", id);
         return toEquipmentResponse(findEquipmentById(id));
     }
 
     public List<GroundEquipmentResponse> getAvailableEquipment() {
+        log.debug("Fetching all available ground equipment");
         return equipmentRepository.findByStatus(EquipmentStatus.Available)
                 .stream().map(this::toEquipmentResponse).toList();
     }
 
     @Transactional
     public GroundEquipmentResponse updateEquipmentStatus(String id, EquipmentStatusRequest request) {
+        log.info("Updating status of equipment ID: {} to {}", id, request.getStatus());
         GroundEquipment equipment = findEquipmentById(id);
+        EquipmentStatus oldStatus = equipment.getStatus();
         equipment.setStatus(request.getStatus());
-        return toEquipmentResponse(equipmentRepository.save(equipment));
+
+        GroundEquipment updated = equipmentRepository.save(equipment);
+        log.info("Equipment ID: {} status updated from {} to {}", id, oldStatus, updated.getStatus());
+        return toEquipmentResponse(updated);
     }
 
     // ─── Allocations ────────────────────────────────────────────────────────────
 
     @Transactional
     public EquipmentAllocationResponse allocate(EquipmentAllocationRequest request, String userId) {
+        log.info("Processing allocation request for Equipment ID: {} to Flight ID: {} by User: {}",
+                request.getEquipmentId(), request.getFlightId(), userId);
+
         GroundEquipment equipment = findEquipmentById(request.getEquipmentId());
 
         // Guard: equipment must be Available
         if (equipment.getStatus() != EquipmentStatus.Available) {
+            log.warn("Allocation rejected. Equipment {} is in state: {}", equipment.getRegistrationNumber(), equipment.getStatus());
             throw new ConflictException("Equipment " + equipment.getRegistrationNumber()
                     + " is not available (current status: " + equipment.getStatus() + ")");
         }
@@ -85,13 +104,17 @@ public class GseService {
         boolean alreadyAllocated = allocationRepository
                 .existsByEquipmentAndStatus(equipment, AllocationStatus.Allocated);
         if (alreadyAllocated) {
+            log.error("Conflict detected. Equipment {} is already marked as allocated in DB.", equipment.getRegistrationNumber());
             throw new ConflictException("Equipment " + equipment.getRegistrationNumber()
                     + " is already allocated to a flight");
         }
 
         Flight flight = flightService.findById(request.getFlightId());
         User allocatedBy = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> {
+                    log.error("Allocation failed. User ID: {} not found", userId);
+                    return new ResourceNotFoundException("User not found");
+                });
 
         EquipmentAllocation allocation = new EquipmentAllocation();
         allocation.setEquipment(equipment);
@@ -105,23 +128,32 @@ public class GseService {
         equipment.setStatus(EquipmentStatus.Allocated);
         equipmentRepository.save(equipment);
 
-        return toAllocationResponse(allocationRepository.save(allocation));
+        EquipmentAllocation savedAllocation = allocationRepository.save(allocation);
+        log.info("Successfully allocated Equipment {} to Flight {}. Allocation ID: {}",
+                equipment.getRegistrationNumber(), flight.getFlightNumber(), savedAllocation.getAllocationId());
+
+        return toAllocationResponse(savedAllocation);
     }
 
     public List<EquipmentAllocationResponse> getAllocationsByFlight(String flightId) {
+        log.debug("Fetching allocations for flight ID: {}", flightId);
         return allocationRepository.findByFlight_FlightId(flightId)
                 .stream().map(this::toAllocationResponse).toList();
     }
 
     public List<EquipmentAllocationResponse> getAllActiveAllocations() {
+        log.debug("Fetching all active allocations");
         return allocationRepository.findByStatusOrderByAllocationTimeDesc(AllocationStatus.Allocated)
                 .stream().map(this::toAllocationResponse).toList();
     }
 
     @Transactional
     public EquipmentAllocationResponse release(String allocationId) {
+        log.info("Processing release for Allocation ID: {}", allocationId);
         EquipmentAllocation allocation = findAllocationById(allocationId);
+
         if (allocation.getStatus() == AllocationStatus.Released) {
+            log.warn("Release aborted. Allocation ID: {} is already released", allocationId);
             throw new BadRequestException("Equipment is already released");
         }
         allocation.setStatus(AllocationStatus.Released);
@@ -131,17 +163,25 @@ public class GseService {
         equipment.setStatus(EquipmentStatus.Available);
         equipmentRepository.save(equipment);
 
-        return toAllocationResponse(allocationRepository.save(allocation));
+        EquipmentAllocation savedAllocation = allocationRepository.save(allocation);
+        log.info("Successfully released Equipment {} from Allocation ID: {}", equipment.getRegistrationNumber(), allocationId);
+
+        return toAllocationResponse(savedAllocation);
     }
 
     // ─── Maintenance ────────────────────────────────────────────────────────────
 
     @Transactional
     public EquipmentMaintenanceResponse reportMaintenance(EquipmentMaintenanceRequest request,
-            String reportedByUserId) {
+                                                          String reportedByUserId) {
+        log.info("Reporting maintenance fault for Equipment ID: {} by User ID: {}", request.getEquipmentId(), reportedByUserId);
+
         GroundEquipment equipment = findEquipmentById(request.getEquipmentId());
         User reportedBy = userRepository.findById(reportedByUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> {
+                    log.error("Maintenance reporting failed. User ID: {} not found", reportedByUserId);
+                    return new ResourceNotFoundException("User not found");
+                });
 
         // Put equipment into Maintenance
         equipment.setStatus(EquipmentStatus.Maintenance);
@@ -155,25 +195,34 @@ public class GseService {
         maintenance.setStatus(MaintenanceStatus.Reported);
 
         // Notify supervisors
+        log.debug("Dispatching maintenance notifications to GroundSupervisors");
         userRepository.findByRole(Role.GroundSupervisor).forEach(u ->
                 notificationService.sendNotification(u.getUserId(),
                         "Equipment fault reported: " + equipment.getRegistrationNumber()
                                 + " — " + request.getIssue(),
                         NotificationCategory.Equipment));
 
-        return toMaintenanceResponse(maintenanceRepository.save(maintenance));
+        EquipmentMaintenance savedMaintenance = maintenanceRepository.save(maintenance);
+        log.info("Maintenance logged successfully. Record ID: {} for Equipment: {}",
+                savedMaintenance.getMaintenanceId(), equipment.getRegistrationNumber());
+
+        return toMaintenanceResponse(savedMaintenance);
     }
 
     public List<EquipmentMaintenanceResponse> getAllMaintenance() {
+        log.debug("Fetching all maintenance history records");
         return maintenanceRepository.findAllByOrderByReportedDateDesc()
                 .stream().map(this::toMaintenanceResponse).toList();
     }
 
     @Transactional
     public EquipmentMaintenanceResponse resolveMaintenence(String maintenanceId) {
+        log.info("Resolving maintenance for Record ID: {}", maintenanceId);
         EquipmentMaintenance maintenance = maintenanceRepository.findById(maintenanceId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Maintenance record not found: " + maintenanceId));
+                .orElseThrow(() -> {
+                    log.error("Resolution failed. Maintenance record ID: {} not found", maintenanceId);
+                    return new ResourceNotFoundException("Maintenance record not found: " + maintenanceId);
+                });
 
         maintenance.setStatus(MaintenanceStatus.ReturnedToService);
 
@@ -182,19 +231,29 @@ public class GseService {
         equipment.setStatus(EquipmentStatus.Available);
         equipmentRepository.save(equipment);
 
-        return toMaintenanceResponse(maintenanceRepository.save(maintenance));
+        EquipmentMaintenance savedMaintenance = maintenanceRepository.save(maintenance);
+        log.info("Maintenance Record ID: {} resolved. Equipment {} is now Available.",
+                maintenanceId, equipment.getRegistrationNumber());
+
+        return toMaintenanceResponse(savedMaintenance);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     private GroundEquipment findEquipmentById(String id) {
         return equipmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Equipment not found: " + id));
+                .orElseThrow(() -> {
+                    log.warn("GroundEquipment not found with ID: {}", id);
+                    return new ResourceNotFoundException("Equipment not found: " + id);
+                });
     }
 
     private EquipmentAllocation findAllocationById(String id) {
         return allocationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Allocation not found: " + id));
+                .orElseThrow(() -> {
+                    log.warn("EquipmentAllocation not found with ID: {}", id);
+                    return new ResourceNotFoundException("Allocation not found: " + id);
+                });
     }
 
     private GroundEquipmentResponse toEquipmentResponse(GroundEquipment e) {

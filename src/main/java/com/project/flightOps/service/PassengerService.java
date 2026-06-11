@@ -15,12 +15,14 @@ import com.project.flightOps.responsedto.CheckInCounterResponse;
 import com.project.flightOps.responsedto.SpecialAssistanceResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j; // 1. Imported Slf4j
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j // 2. Added Lombok Slf4j annotation
 public class PassengerService {
 
     private final CheckInCounterRepository counterRepository;
@@ -34,9 +36,12 @@ public class PassengerService {
 
     @Transactional
     public CheckInCounterResponse assignCounter(CheckInCounterRequest request) {
+        log.info("Attempting to assign check-in counter {} for flight ID {}", request.getCounterNumber(), request.getFlightId());
+
         // Prevent double-assigning the same counter while it's Open/Standby
         if (counterRepository.existsByCounterNumberAndStatusNot(
                 request.getCounterNumber(), CounterStatus.Closed)) {
+            log.warn("Conflict detected: Counter {} is already in use", request.getCounterNumber());
             throw new ConflictException("Counter " + request.getCounterNumber()
                     + " is already in use for another flight");
         }
@@ -52,11 +57,13 @@ public class PassengerService {
         counter.setStatus(CounterStatus.Standby);
 
         if (request.getAssignedAgentId() != null) {
+            log.debug("Assigning agent ID {} to counter {}", request.getAssignedAgentId(), request.getCounterNumber());
             User agent = findAgent(request.getAssignedAgentId());
             counter.setAssignedAgent(agent);
         }
 
         CheckInCounter saved = counterRepository.save(counter);
+        log.info("Successfully assigned counter ID {} (Number: {}) to flight {}", saved.getCounterId(), saved.getCounterNumber(), flight.getFlightNumber());
 
         // Notify airline coordinator
         userRepository.findByRole(Role.AirlineCoordinator).forEach(u ->
@@ -69,20 +76,26 @@ public class PassengerService {
     }
 
     public List<CheckInCounterResponse> getAllCounters() {
+        log.debug("Fetching all check-in counters ordered by open time");
         return counterRepository.findAllByOrderByOpenTimeAsc()
                 .stream().map(this::toCounterResponse).toList();
     }
 
     public List<CheckInCounterResponse> getCountersByFlight(String flightId) {
+        log.debug("Fetching check-in counters for flight ID {}", flightId);
         return counterRepository.findByFlight_FlightId(flightId)
                 .stream().map(this::toCounterResponse).toList();
     }
 
     @Transactional
     public CheckInCounterResponse updateCounterStatus(String counterId, CounterStatusRequest request) {
+        log.info("Updating status of counter ID {} to {}", counterId, request.getStatus());
         CheckInCounter counter = findCounterById(counterId);
+
+        CounterStatus oldStatus = counter.getStatus();
         counter.setStatus(request.getStatus());
         CheckInCounter saved = counterRepository.save(counter);
+        log.debug("Counter ID {} shifted status from {} to {}", counterId, oldStatus, saved.getStatus());
 
         if (request.getStatus() == CounterStatus.Open) {
             notificationService.sendNotification(
@@ -98,8 +111,11 @@ public class PassengerService {
 
     @Transactional
     public BoardingGateResponse assignGate(BoardingGateRequest request) {
+        log.info("Attempting to assign gate {} for flight ID {}", request.getGateNumber(), request.getFlightId());
+
         if (gateRepository.existsByGateNumberAndStatusNot(
                 request.getGateNumber(), GateStatus.Closed)) {
+            log.warn("Conflict detected: Gate {} is already in use", request.getGateNumber());
             throw new ConflictException("Gate " + request.getGateNumber()
                     + " is already in use for another flight");
         }
@@ -115,10 +131,12 @@ public class PassengerService {
         gate.setStatus(GateStatus.Closed);
 
         if (request.getAssignedAgentId() != null) {
+            log.debug("Assigning agent ID {} to gate {}", request.getAssignedAgentId(), request.getGateNumber());
             gate.setAssignedAgent(findAgent(request.getAssignedAgentId()));
         }
 
         BoardingGate saved = gateRepository.save(gate);
+        log.info("Successfully assigned gate ID {} (Number: {}) to flight {}", saved.getGateId(), saved.getGateNumber(), flight.getFlightNumber());
 
         // Notify ground supervisor and ramp officers about gate assignment
         List.of(Role.GroundSupervisor, Role.RampOfficer).forEach(role ->
@@ -132,20 +150,26 @@ public class PassengerService {
     }
 
     public List<BoardingGateResponse> getAllGates() {
+        log.debug("Fetching all boarding gates ordered by open time");
         return gateRepository.findAllByOrderByOpenTimeAsc()
                 .stream().map(this::toGateResponse).toList();
     }
 
     public List<BoardingGateResponse> getGatesByFlight(String flightId) {
+        log.debug("Fetching boarding gates for flight ID {}", flightId);
         return gateRepository.findByFlight_FlightId(flightId)
                 .stream().map(this::toGateResponse).toList();
     }
 
     @Transactional
     public BoardingGateResponse updateGateStatus(String gateId, GateStatusRequest request) {
+        log.info("Updating status of gate ID {} to {}", gateId, request.getStatus());
         BoardingGate gate = findGateById(gateId);
+
+        GateStatus oldStatus = gate.getStatus();
         gate.setStatus(request.getStatus());
         BoardingGate saved = gateRepository.save(gate);
+        log.debug("Gate ID {} shifted status from {} to {}", gateId, oldStatus, saved.getStatus());
 
         // Notify ramp officers when boarding starts
         if (request.getStatus() == GateStatus.Boarding) {
@@ -162,6 +186,9 @@ public class PassengerService {
 
     @Transactional
     public SpecialAssistanceResponse createAssistanceRequest(SpecialAssistanceRequest request) {
+        log.info("Creating special assistance request type '{}' for passenger '{}' on flight ID {}",
+                request.getAssistanceType(), request.getPassengerName(), request.getFlightId());
+
         Flight flight = flightService.findById(request.getFlightId());
 
         SpecialAssistance assistance = new SpecialAssistance();
@@ -171,6 +198,7 @@ public class PassengerService {
         assistance.setStatus(AssistanceStatus.Requested);
 
         SpecialAssistance saved = assistanceRepository.save(assistance);
+        log.info("Successfully created special assistance request ID {}", saved.getAssistanceId());
 
         // Notify all passenger agents about new request
         userRepository.findByRole(Role.PassengerAgent).forEach(u ->
@@ -184,15 +212,18 @@ public class PassengerService {
     }
 
     public List<SpecialAssistanceResponse> getAllAssistanceRequests() {
+        log.debug("Fetching all special assistance requests ordered by status");
         return assistanceRepository.findAllByOrderByStatusAsc()
                 .stream().map(this::toAssistanceResponse).toList();
     }
 
     @Transactional
     public SpecialAssistanceResponse assignAgent(String assistanceId, AssistanceAssignRequest request) {
+        log.info("Assigning agent ID {} to assistance request ID {}", request.getAgentId(), assistanceId);
         SpecialAssistance assistance = findAssistanceById(assistanceId);
 
         if (assistance.getStatus() == AssistanceStatus.Completed) {
+            log.warn("Bad Request: Assistance request ID {} is already marked Completed", assistanceId);
             throw new BadRequestException("This assistance request is already completed");
         }
 
@@ -201,6 +232,7 @@ public class PassengerService {
         assistance.setStatus(AssistanceStatus.Assigned);
 
         SpecialAssistance saved = assistanceRepository.save(assistance);
+        log.info("Assistance request ID {} successfully updated to ASSIGNED status", assistanceId);
 
         // Notify the assigned agent
         notificationService.sendNotification(agent.getUserId(),
@@ -214,38 +246,58 @@ public class PassengerService {
 
     @Transactional
     public SpecialAssistanceResponse completeAssistance(String assistanceId) {
+        log.info("Attempting to complete assistance request ID {}", assistanceId);
         SpecialAssistance assistance = findAssistanceById(assistanceId);
 
         if (assistance.getStatus() != AssistanceStatus.Assigned) {
+            log.warn("Bad Request: Assistance request ID {} is in '{}' status, must be 'Assigned' to complete.",
+                    assistanceId, assistance.getStatus());
             throw new BadRequestException(
                     "Assistance must be Assigned before it can be marked complete");
         }
+
         assistance.setStatus(AssistanceStatus.Completed);
-        return toAssistanceResponse(assistanceRepository.save(assistance));
+        SpecialAssistance saved = assistanceRepository.save(assistance);
+        log.info("Assistance request ID {} successfully marked COMPLETED", assistanceId);
+
+        return toAssistanceResponse(saved);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     private User findAgent(String agentId) {
         return userRepository.findById(agentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Agent not found: " + agentId));
+                .orElseThrow(() -> {
+                    log.error("ResourceNotFoundException: Agent with ID {} not found", agentId);
+                    return new ResourceNotFoundException("Agent not found: " + agentId);
+                });
     }
 
     private CheckInCounter findCounterById(String id) {
         return counterRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Counter not found: " + id));
+                .orElseThrow(() -> {
+                    log.error("ResourceNotFoundException: Check-in Counter with ID {} not found", id);
+                    return new ResourceNotFoundException("Counter not found: " + id);
+                });
     }
 
     private BoardingGate findGateById(String id) {
         return gateRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Gate not found: " + id));
+                .orElseThrow(() -> {
+                    log.error("ResourceNotFoundException: Boarding Gate with ID {} not found", id);
+                    return new ResourceNotFoundException("Gate not found: " + id);
+                });
     }
 
     private SpecialAssistance findAssistanceById(String id) {
         return assistanceRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Assistance request not found: " + id));
+                .orElseThrow(() -> {
+                    log.error("ResourceNotFoundException: Special Assistance request with ID {} not found", id);
+                    return new ResourceNotFoundException("Assistance request not found: " + id);
+                });
     }
+
+    // ─── Mappers (Omitted logging here to prevent cluttering) ───────────────────
 
     private CheckInCounterResponse toCounterResponse(CheckInCounter c) {
         return CheckInCounterResponse.builder()

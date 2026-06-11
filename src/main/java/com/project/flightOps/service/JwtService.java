@@ -27,6 +27,7 @@ public class JwtService {
     // ── Token generation ─────────────────────────────────────────────────────
 
     public String generateAccessToken(UserDetails userDetails, Role role, String userId) {
+        log.info("Generating Access Token for user: {} with role: {}", userDetails.getUsername(), role);
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role.name());
@@ -35,6 +36,7 @@ public class JwtService {
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
+        log.info("Generating Refresh Token for user: {}", userDetails.getUsername());
         return buildToken(new HashMap<>(), userDetails.getUsername(), jwtProperties.getRefreshTokenExpiryMs());
     }
 
@@ -53,15 +55,31 @@ public class JwtService {
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
             final String email = extractEmail(token);
-            return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
+            boolean isUsernameMatch = email.equals(userDetails.getUsername());
+            boolean isExpired = isTokenExpired(token);
+
+            if (!isUsernameMatch) {
+                log.warn("JWT validation failed: Token username '{}' does not match user details '{}'", email, userDetails.getUsername());
+            }
+
+            return isUsernameMatch && !isExpired;
         } catch (JwtException e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.error("JWT validation failed due to structural or cryptographic error: {}", e.getMessage());
             return false;
         }
     }
 
     public boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        try {
+            boolean expired = extractExpiration(token).before(new Date());
+            if (expired) {
+                log.warn("JWT validation failed: Token has expired.");
+            }
+            return expired;
+        } catch (JwtException e) {
+            log.error("Failed to check token expiration: {}", e.getMessage());
+            return true;
+        }
     }
 
     // ── Claims extraction ─────────────────────────────────────────────────────
@@ -71,8 +89,13 @@ public class JwtService {
     }
 
     public Role extractRole(String token) {
-        String roleName = extractClaim(token, claims -> claims.get("role", String.class));
-        return Role.valueOf(roleName);
+        try {
+            String roleName = extractClaim(token, claims -> claims.get("role", String.class));
+            return Role.valueOf(roleName);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            log.error("Failed to parse Role from token claims: {}", e.getMessage());
+            throw new JwtException("Invalid role in token", e);
+        }
     }
 
     public String extractUserId(String token) {
@@ -89,16 +112,25 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        try {
+            return Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (JwtException e) {
+            log.debug("Failed to parse JWT claims: {}", e.getMessage());
+            throw e; // Rethrow to let calling methods handle validation context
+        }
     }
 
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtProperties.getSecret());
-        return Keys.hmacShaKeyFor(keyBytes);
+        try {
+            byte[] keyBytes = Decoders.BASE64.decode(jwtProperties.getSecret());
+            return Keys.hmacShaKeyFor(keyBytes);
+        } catch (IllegalArgumentException e) {
+            log.error("Critical configuration error: JWT secret key is not properly Base64 encoded.");
+            throw e;
+        }
     }
-
 }
