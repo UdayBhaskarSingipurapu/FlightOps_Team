@@ -71,7 +71,7 @@ public class NotificationService {
     public List<NotificationResponse> getAllForUser(String userId) {
         log.info("Fetching all notifications for user [{}]", userId);
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByEmail(userId)
                 .orElseThrow(() -> {
                     log.error("Failed to fetch all notifications. User not found: {}", userId);
                     return new ResourceNotFoundException("User not found: " + userId);
@@ -87,7 +87,7 @@ public class NotificationService {
     public List<NotificationResponse> getUnreadForUser(String userId) {
         log.info("Fetching unread notifications for user [{}]", userId);
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByEmail(userId)
                 .orElseThrow(() -> {
                     log.error("Failed to fetch unread notifications. User not found: {}", userId);
                     return new ResourceNotFoundException("User not found: " + userId);
@@ -116,7 +116,7 @@ public class NotificationService {
     public void markAllAsRead(String userId) {
         log.info("Marking all notifications as READ for user [{}]", userId);
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByEmail(userId)
                 .orElseThrow(() -> {
                     log.error("Failed to bulk mark as read. User not found: {}", userId);
                     return new ResourceNotFoundException("User not found: " + userId);

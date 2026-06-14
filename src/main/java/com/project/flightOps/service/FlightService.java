@@ -88,7 +88,7 @@ public class FlightService {
 
     public List<FlightResponse> getByAirline(String airlineCode) {
         log.debug("Fetching flights for airline code: {}", airlineCode);
-        return flightRepository.findByAirlineCodeOrderByScheduledArrivalAsc(airlineCode)
+        return flightRepository.findByAirlineCodeIgnoreCaseOrderByScheduledArrivalAsc(airlineCode)
                 .stream().map(this::toResponse).toList();
     }
 

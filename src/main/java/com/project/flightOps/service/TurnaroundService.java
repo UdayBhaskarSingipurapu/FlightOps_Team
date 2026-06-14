@@ -63,7 +63,7 @@ public class TurnaroundService {
                     + flight.getFlightNumber());
         }
 
-        User supervisor = userRepository.findById(supervisorId)
+        User supervisor = userRepository.findByEmail(supervisorId)
                 .orElseThrow(() -> {
                     log.error("Failed to create plan: Supervisor not found with ID: {}", supervisorId);
                     return new ResourceNotFoundException("Supervisor not found");

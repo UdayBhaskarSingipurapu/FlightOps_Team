@@ -59,7 +59,7 @@ public class BaggageService {
                     + flight.getFlightNumber());
         }
 
-        User operator = userRepository.findById(operatorUserId)
+        User operator = userRepository.findByEmail(operatorUserId)
                 .orElseThrow(() -> {
                     log.error("Operator not found with ID: {}", operatorUserId);
                     return new ResourceNotFoundException("Operator not found");

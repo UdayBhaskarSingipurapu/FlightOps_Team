@@ -46,7 +46,7 @@ public class HandlingRequestService {
                     + flight.getFlightNumber());
         }
 
-        User requestedBy = userRepository.findById(requestedByUserId)
+        User requestedBy = userRepository.findByEmail(requestedByUserId)
                 .orElseThrow(() -> {
                     log.error("Failed to create handling request. User not found: {}", requestedByUserId);
                     return new ResourceNotFoundException("User not found");

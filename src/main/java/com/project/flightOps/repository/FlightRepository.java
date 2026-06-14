@@ -15,7 +15,7 @@ public interface FlightRepository extends JpaRepository<Flight, String> {
     List<Flight> findByScheduledArrivalBetweenOrderByScheduledArrivalAsc(
             LocalDateTime start, LocalDateTime end);
 
-    List<Flight> findByAirlineCodeOrderByScheduledArrivalAsc(String airlineCode);
+    List<Flight> findByAirlineCodeIgnoreCaseOrderByScheduledArrivalAsc(String airlineCode);
 
     List<Flight> findByStatusOrderByScheduledArrivalAsc(FlightStatus status);
 

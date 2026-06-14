@@ -110,7 +110,7 @@ public class GseService {
         }
 
         Flight flight = flightService.findById(request.getFlightId());
-        User allocatedBy = userRepository.findById(userId)
+        User allocatedBy = userRepository.findByEmail(userId)
                 .orElseThrow(() -> {
                     log.error("Allocation failed. User ID: {} not found", userId);
                     return new ResourceNotFoundException("User not found");
@@ -177,7 +177,7 @@ public class GseService {
         log.info("Reporting maintenance fault for Equipment ID: {} by User ID: {}", request.getEquipmentId(), reportedByUserId);
 
         GroundEquipment equipment = findEquipmentById(request.getEquipmentId());
-        User reportedBy = userRepository.findById(reportedByUserId)
+        User reportedBy = userRepository.findByEmail(reportedByUserId)
                 .orElseThrow(() -> {
                     log.error("Maintenance reporting failed. User ID: {} not found", reportedByUserId);
                     return new ResourceNotFoundException("User not found");

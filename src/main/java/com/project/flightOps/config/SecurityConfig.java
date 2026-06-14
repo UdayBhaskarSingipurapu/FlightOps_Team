@@ -76,7 +76,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,  "/api/handling-requests")
                         .hasRole("AirlineCoordinator")
                         .requestMatchers(HttpMethod.GET,   "/api/handling-requests")
-                        .hasAnyRole("AirlineCoordinator", "GroundSupervisor")
+                        .hasAnyRole("AirlineCoordinator", "GroundSupervisor", "Admin")
                         .requestMatchers(HttpMethod.PATCH, "/api/handling-requests/{id}/confirm")
                         .hasRole("GroundSupervisor")
                         .requestMatchers(HttpMethod.PATCH, "/api/handling-requests/{id}/reject")
