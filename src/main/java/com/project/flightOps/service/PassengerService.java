@@ -97,12 +97,12 @@ public class PassengerService {
         CheckInCounter saved = counterRepository.save(counter);
         log.debug("Counter ID {} shifted status from {} to {}", counterId, oldStatus, saved.getStatus());
 
-        if (request.getStatus() == CounterStatus.Open) {
-            notificationService.sendNotification(
-                    saved.getFlight().getAirlineCode(), // notify by airline code convention
-                    "Check-in counter " + saved.getCounterNumber()
-                            + " is now OPEN for flight " + saved.getFlight().getFlightNumber(),
-                    NotificationCategory.Passenger);
+        if(request.getStatus() == CounterStatus.Open) {
+            userRepository.findByRole(Role.AirlineCoordinator).forEach(u ->
+                    notificationService.sendNotification(u.getUserId(),
+                            "Check-in counter " + saved.getCounterNumber()
+                                    + " is now OPEN for flight " + saved.getFlight().getFlightNumber(),
+                            NotificationCategory.Passenger));
         }
         return toCounterResponse(saved);
     }
