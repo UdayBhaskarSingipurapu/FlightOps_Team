@@ -196,7 +196,7 @@ public class TurnaroundService {
             throw new BadRequestException("Milestone is already completed");
         }
 
-        User completedBy = userRepository.findById(completedByUserId)
+        User completedBy = userRepository.findByEmail(completedByUserId)
                 .orElseThrow(() -> {
                     log.error("Milestone completion failed: User {} not found", completedByUserId);
                     return new ResourceNotFoundException("User not found");
