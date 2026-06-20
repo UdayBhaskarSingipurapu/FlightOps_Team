@@ -1,4 +1,4 @@
-package com.project.flightOps.util;
+package com.project.flightOps.exception;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

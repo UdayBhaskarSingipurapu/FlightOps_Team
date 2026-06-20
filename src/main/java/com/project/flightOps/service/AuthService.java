@@ -132,12 +132,12 @@ public class AuthService {
         // 4. Issue a clean new Access Token and a rolling Refresh Token
         log.debug("Generating rolling tokens for user: {}", email);
         String newAccessToken = jwtService.generateAccessToken(userPrincipal, user.getRole(), user.getUserId());
-        String newRefreshToken = jwtService.generateRefreshToken(userPrincipal);
+//        String newRefreshToken = jwtService.generateRefreshToken(userPrincipal);
 
         log.info("Tokens successfully refreshed for user: {}", email);
         return RefreshTokenResponse.builder()
                 .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
+                .refreshToken(refreshToken)
                 .build();
     }
 }

@@ -1,7 +1,7 @@
 package com.project.flightOps.config;
 
-import com.project.flightOps.util.JwtAccessDeniedHandler;
-import com.project.flightOps.util.JwtAuthEntryPoint;
+import com.project.flightOps.exception.JwtAccessDeniedHandler;
+import com.project.flightOps.exception.JwtAuthEntryPoint;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -144,7 +144,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
 
-                        // Deny everything else by default
+
                         .anyRequest().authenticated()
                 )
 
