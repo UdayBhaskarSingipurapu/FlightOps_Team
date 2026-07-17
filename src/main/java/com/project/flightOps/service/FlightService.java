@@ -1,11 +1,13 @@
 package com.project.flightOps.service;
 
 import com.project.flightOps.entity.Flight;
+import com.project.flightOps.entity.User;
 import com.project.flightOps.enums.FlightStatus;
 import com.project.flightOps.enums.NotificationCategory;
 import com.project.flightOps.enums.Role;
 import com.project.flightOps.exception.BadRequestException;
 import com.project.flightOps.exception.ConflictException;
+import com.project.flightOps.exception.ForbiddenException;
 import com.project.flightOps.exception.ResourceNotFoundException;
 import com.project.flightOps.repository.FlightRepository;
 import com.project.flightOps.repository.UserRepository;
@@ -15,6 +17,7 @@ import com.project.flightOps.responsedto.FlightResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 1. Imported Slf4j
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -29,14 +32,46 @@ public class FlightService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
+
     @Transactional
     public FlightResponse create(FlightRequest request) {
         log.info("Attempting to create a new flight: {}", request.getFlightNumber());
 
-        if (request.getScheduledDeparture().isBefore(request.getScheduledArrival())) {
-            log.warn("Flight creation failed: Departure time {} is before arrival time {}",
-                    request.getScheduledDeparture(), request.getScheduledArrival());
-            throw new BadRequestException("Scheduled departure must be after arrival");
+        // 1. Validation: Origin and Destination cannot be the same (case-insensitive)
+        if (request.getOrigin().trim().equalsIgnoreCase(request.getDestination().trim())) {
+            log.warn("Flight creation failed: Origin and destination are the same ({})", request.getOrigin());
+            throw new BadRequestException("Origin and destination cannot be the same airport");
+        }
+
+        // 2. Validation: Departure must be chronologically after arrival (and not at the exact same time)
+        if (!request.getScheduledArrival().isBefore(request.getScheduledDeparture())) {
+            log.warn("Flight creation failed: Arrival time {} must be before departure time {}",
+                    request.getScheduledArrival(), request.getScheduledDeparture());
+            throw new BadRequestException("Scheduled arrival must be strictly before the scheduled departure time");
+        }
+
+        // 3. Validation: Current logged-in Admin's airport assignment check
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        User currentAdmin = userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated admin profile not found"));
+
+        String adminAirportId = currentAdmin.getAirportId();
+        if (adminAirportId == null || adminAirportId.trim().isEmpty()) {
+            throw new ForbiddenException("You are not assigned to any airport base and cannot manage flights");
+        }
+
+        if (!adminAirportId.equalsIgnoreCase(request.getAirlineCode())) {
+            log.info("Admin airport code is different from flight airline code. Admin: {}, Flight: {}",
+                    adminAirportId, request.getAirlineCode());
+            throw new ForbiddenException("Flight airline code mismatch, You can only schedule flights for your airline only");
+        }
+
+        boolean matchesOrigin = request.getOrigin().trim().equalsIgnoreCase(adminAirportId.trim());
+
+        if (!matchesOrigin) {
+            log.warn("Flight creation failed: Flight origin ({}) does not match admin's airport ({})",
+                    request.getOrigin(), adminAirportId);
+            throw new BadRequestException("You can only schedule flights departing from your assigned airport (" + adminAirportId + ")");
         }
 
         // Prevent duplicate flight on same day
@@ -128,18 +163,25 @@ public class FlightService {
     public FlightResponse updateStatus(String flightId, FlightStatusRequest request) {
         Flight flight = findById(flightId);
         FlightStatus oldStatus = flight.getStatus();
+        FlightStatus newStatus = request.getStatus();
 
-        log.info("Updating status for flight ID {} from {} to {}", flightId, oldStatus, request.getStatus());
+        log.info("Attempting to update status for flight ID {} from {} to {}", flightId, oldStatus, newStatus);
 
-        flight.setStatus(request.getStatus());
+        if (!oldStatus.isValidTransitionTo(newStatus)) {
+            throw new IllegalArgumentException(
+                    String.format("Invalid status transition: Cannot change flight status from %s to %s", oldStatus, newStatus)
+            );
+        }
+
+        flight.setStatus(newStatus);
         Flight saved = flightRepository.save(flight);
 
         // Notify on status changes that affect ground ops
-        if (request.getStatus() == FlightStatus.Arrived) {
+        if (newStatus == FlightStatus.Arrived) {
             notifyRoles("Flight " + saved.getFlightNumber() + " has arrived at stand " + saved.getStand(),
                     NotificationCategory.FlightSchedule,
                     List.of(Role.GroundSupervisor, Role.RampOfficer, Role.GSEManager, Role.PassengerAgent));
-        } else if (request.getStatus() == FlightStatus.Delayed) {
+        } else if (newStatus == FlightStatus.Delayed) {
             notifyRoles("Flight " + saved.getFlightNumber() + " is delayed",
                     NotificationCategory.FlightSchedule,
                     List.of(Role.AirlineCoordinator, Role.GroundSupervisor));
