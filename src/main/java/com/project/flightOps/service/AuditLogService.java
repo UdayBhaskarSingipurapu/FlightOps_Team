@@ -7,12 +7,15 @@ import com.project.flightOps.repository.AuditLogRepository;
 import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.AuditLogRequest;
 import com.project.flightOps.responsedto.AuditLogResponse;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 1. Added SLF4J Import
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -66,42 +69,49 @@ public class AuditLogService {
     }
 
     // GET /api/audit?userId=&entityType=&from=&to=
-    public List<AuditLogResponse> query(String userId, String entityType,
+    public List<AuditLogResponse> query(String userEmail, String entityType,
                                         LocalDateTime from, LocalDateTime to) {
 
-        log.info("Processing audit log query with filters -> userId: {}, entityType: {}, from: {}, to: {}",
-                userId, entityType, from, to);
+        log.info("Processing combined audit log query with filters -> userEmail: {}, entityType: {}, from: {}, to: {}",
+                userEmail, entityType, from, to);
 
-        if (userId != null) {
-            log.debug("Querying audit logs by userId: {}", userId);
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> {
-                        log.error("Query failed: User {} not found", userId);
-                        return new ResourceNotFoundException("User not found");
-                    });
-            return auditLogRepository.findByUserOrderByTimestampDesc(user)
-                    .stream().map(this::toResponse).toList();
-        }
-        if (entityType != null) {
-            log.debug("Querying audit logs by entityType: {}", entityType);
-            return auditLogRepository.findByEntityTypeOrderByTimestampDesc(entityType)
-                    .stream().map(this::toResponse).toList();
-        }
-        if (from != null && to != null) {
-            log.debug("Querying audit logs between dates: {} and {}", from, to);
-            return auditLogRepository.findByTimestampBetweenOrderByTimestampDesc(from, to)
-                    .stream().map(this::toResponse).toList();
-        }
+        Specification<AuditLog> spec = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
 
-        log.debug("No filters provided. Fetching all audit logs.");
-        return auditLogRepository.findAllByOrderByTimestampDesc()
-                .stream().map(this::toResponse).toList();
+            if (userEmail != null && !userEmail.trim().isEmpty()) {
+                User user = userRepository.findByEmail(userEmail)
+                        .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + userEmail));
+                predicates.add(criteriaBuilder.equal(root.get("user"), user));
+            }
+
+            if (entityType != null && !entityType.trim().isEmpty()) {
+                predicates.add(criteriaBuilder.equal(root.get("entityType"), entityType));
+            }
+
+            if (from != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("timestamp"), from));
+            }
+
+            if (to != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("timestamp"), to));
+            }
+
+            // Enforce the sorting order by timestamp descending
+            query.orderBy(criteriaBuilder.desc(root.get("timestamp")));
+
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return auditLogRepository.findAll(spec)
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     private AuditLogResponse toResponse(AuditLog a) {
         return AuditLogResponse.builder()
                 .auditId(a.getAuditId())
-                .userId(a.getUser().getUserId())
+                .userEmail(a.getUser().getEmail())
                 .userName(a.getUser().getName())
                 .userRole(a.getUser().getRole().name())
                 .action(a.getAction())

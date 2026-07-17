@@ -3,13 +3,14 @@ package com.project.flightOps.repository;
 import com.project.flightOps.entity.AuditLog;
 import com.project.flightOps.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-public interface AuditLogRepository extends JpaRepository<AuditLog, String> {
+public interface AuditLogRepository extends JpaRepository<AuditLog, String>, JpaSpecificationExecutor<AuditLog> {
 
     List<AuditLog> findByUserOrderByTimestampDesc(User user);
 

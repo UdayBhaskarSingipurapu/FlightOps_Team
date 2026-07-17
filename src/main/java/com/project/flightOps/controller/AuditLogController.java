@@ -41,7 +41,7 @@ public class AuditLogController {
     // GET /api/audit?userId=&entityType=&from=2025-01-01T00:00:00&to=2025-01-31T23:59:59
     @GetMapping
     public ResponseEntity<ApiResponse<List<AuditLogResponse>>> query(
-            @RequestParam(required = false) String userId,
+            @RequestParam(required = false) String userEmail,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
@@ -49,10 +49,10 @@ public class AuditLogController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
 
         // Log incoming search parameters safely
-        log.info("REST request to query system audit logs. Filter criteria -> UserID: {}, EntityType: {}, From: {}, To: {}",
-                userId, entityType, from, to);
+        log.info("REST request to query system audit logs. Filter criteria -> UserEmail: {}, EntityType: {}, From: {}, To: {}",
+                userEmail, entityType, from, to);
 
-        List<AuditLogResponse> logs = auditLogService.query(userId, entityType, from, to);
+        List<AuditLogResponse> logs = auditLogService.query(userEmail, entityType, from, to);
 
         log.info("Successfully fetched {} audit log entries from database criteria match.", logs.size());
         return ResponseEntity.ok(ApiResponse.success("Audit logs fetched", logs));

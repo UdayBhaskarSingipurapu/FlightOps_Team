@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @Builder
 public class AuditLogResponse {
     private String auditId;
-    private String userId;
+    private String userEmail;
     private String userName;
     private String userRole;
     private String action;
