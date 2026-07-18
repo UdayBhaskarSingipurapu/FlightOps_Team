@@ -81,9 +81,11 @@ public class SecurityConfig {
                         .hasRole("GroundSupervisor")
                         .requestMatchers(HttpMethod.PATCH, "/api/handling-requests/{id}/reject")
                         .hasRole("GroundSupervisor")
+                        .requestMatchers(HttpMethod.GET, "/api/handling-requests/byUser/{userId}")
+                        .hasAnyRole("AirlineCoordinator", "GroundSupervisor")
 
                         // ── Module 3: Turnaround ──────────────────────────────────────
-                        .requestMatchers(HttpMethod.GET,   "/api/turnarounds").hasAnyRole("Admin", "GroundSupervisor", "RampOfficer")
+                        .requestMatchers(HttpMethod.GET,   "/api/turnarounds").hasAnyRole("Admin", "GroundSupervisor", "RampOfficer", "AirlineCoordinator")
                         .requestMatchers(HttpMethod.GET,   "/api/turnarounds/{id}").hasAnyRole("GroundSupervisor", "RampOfficer")
                         .requestMatchers(HttpMethod.PATCH, "/api/turnarounds/{id}/complete").hasRole("GroundSupervisor")
 
@@ -178,7 +180,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173"));
+        config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "http://localhost:5174"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);

@@ -59,6 +59,15 @@ public class HandlingRequestController {
         return ResponseEntity.ok(ApiResponse.success("Handling requests fetched", result));
     }
 
+    @GetMapping("/byUser/{userId}")
+    @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSuperVisor')")
+    public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByUserId(@PathVariable String userId){
+        log.info("fetching handling requests filtered by userId {}", userId);
+        List<HandlingRequestResponse> response = handlingRequestService.getByUserId(userId);
+        log.info("Successfully fetched handling requests {} for userId {}", response, userId);
+        return ResponseEntity.ok(ApiResponse.success("Handling requests fetched", response));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSupervisor', 'Admin')")
     public ResponseEntity<ApiResponse<HandlingRequestResponse>> getById(@PathVariable String id) {

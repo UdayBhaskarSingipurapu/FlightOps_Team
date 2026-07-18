@@ -89,6 +89,11 @@ public class HandlingRequestService {
         return toResponse(findById(requestId));
     }
 
+    public List<HandlingRequestResponse> getByUserId(String userId) {
+        log.debug("Fetching handling request details for ID: {}", userId);
+        return handlingRequestRepository.findAllByRequestedByUserId(userId).stream().map(this::toResponse).toList();
+    }
+
     public List<HandlingRequestResponse> getByFlight(String flightId) {
         log.debug("Fetching handling requests for flight ID: {}", flightId);
         return handlingRequestRepository.findByFlight_FlightId(flightId)
