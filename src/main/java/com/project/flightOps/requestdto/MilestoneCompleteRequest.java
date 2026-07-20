@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class MilestoneCompleteRequest {
+    String flightId;
 
     @NotNull(message = "Actual completion time is required")
     private LocalDateTime actualTime;

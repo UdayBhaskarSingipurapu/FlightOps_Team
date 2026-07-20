@@ -20,7 +20,7 @@ public interface HandlingRequestRepository extends JpaRepository<HandlingRequest
 
     Optional<HandlingRequest> findByFlight(Flight flight);
 
-    List<HandlingRequest> findByFlight_FlightId(String flightId);
+    HandlingRequest findByFlight_FlightId(String flightId);
 
     boolean existsByFlightAndStatusNot(Flight flight, RequestStatus status);
 

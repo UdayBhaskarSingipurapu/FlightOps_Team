@@ -60,7 +60,7 @@ public class HandlingRequestController {
     }
 
     @GetMapping("/byUser/{userId}")
-    @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSuperVisor')")
+    @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSupervisor')")
     public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByUserId(@PathVariable String userId){
         log.info("fetching handling requests filtered by userId {}", userId);
         List<HandlingRequestResponse> response = handlingRequestService.getByUserId(userId);
@@ -78,11 +78,11 @@ public class HandlingRequestController {
     }
 
     @GetMapping("/flight/{flightId}")
-    public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByFlight(
+    public ResponseEntity<ApiResponse<HandlingRequestResponse>> getByFlight(
             @PathVariable String flightId) {
         log.info("Fetching handling requests for flight ID: {}", flightId);
-        List<HandlingRequestResponse> response = handlingRequestService.getByFlight(flightId);
-        log.info("Successfully fetched {} handling requests for flight ID: {}", response.size(), flightId);
+        HandlingRequestResponse response = handlingRequestService.getByFlight(flightId);
+        log.info("Successfully fetched {} handling requests for flight ID: {}", response, flightId);
         return ResponseEntity.ok(ApiResponse.success("Handling requests for flight fetched", response));
     }
 

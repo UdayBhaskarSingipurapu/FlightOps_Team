@@ -13,6 +13,7 @@ import com.project.flightOps.repository.TurnaroundPlanRepository;
 import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.MilestoneCompleteRequest;
 import com.project.flightOps.requestdto.TurnaroundPlanRequest;
+import com.project.flightOps.responsedto.HandlingRequestResponse;
 import com.project.flightOps.responsedto.TurnaroundMilestoneResponse;
 import com.project.flightOps.responsedto.TurnaroundPlanResponse;
 import jakarta.transaction.Transactional;
@@ -23,9 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Slf4j // Enables the 'log' instance variable automatically
 @Service
@@ -36,6 +35,7 @@ public class TurnaroundService {
     private final TurnaroundMilestoneRepository milestoneRepository;
     private final FlightService flightService;
     private final UserRepository userRepository;
+    private final HandlingRequestService handlingRequestService;
     private final NotificationService notificationService;
 
     // Default SLA offset in minutes from scheduled arrival for each milestone
@@ -52,20 +52,43 @@ public class TurnaroundService {
             MilestoneType.PushbackClearance, 60
     );
 
+    private static final List<MilestoneType> COMMON_MILESTONES = List.of(
+            MilestoneType.ChocksOn,
+            MilestoneType.DoorOpen,
+            MilestoneType.StairsDocked,
+            MilestoneType.BoardingComplete,
+            MilestoneType.DoorClose,
+            MilestoneType.PushbackClearance
+    );
+
+    private static final Map<String, List<MilestoneType>> SERVICE_MILESTONES = Map.of(
+            "Baggage", List.of(MilestoneType.BaggageOffload),
+            "Cleaning", List.of(MilestoneType.Cleaning),
+            "Catering", List.of(MilestoneType.Catering),
+            "Fuelling", List.of(MilestoneType.Fuelling)
+    );
+
     @Transactional
     public TurnaroundPlanResponse createPlan(TurnaroundPlanRequest request, String supervisorId) {
-        log.info("Attempting to create turnaround plan for flightId: {} by supervisorId: {}", request.getFlightId(), supervisorId);
+
+        log.info("Attempting to create turnaround plan for flightId: {} by supervisorId: {}",
+                request.getFlightId(), supervisorId);
+
         Flight flight = flightService.findById(request.getFlightId());
 
         if (planRepository.existsByFlight(flight)) {
-            log.warn("Conflict detected: A turnaround plan already exists for flight: {}", flight.getFlightNumber());
-            throw new ConflictException("A turnaround plan already exists for flight: "
-                    + flight.getFlightNumber());
+            log.warn("Conflict detected: A turnaround plan already exists for flight: {}",
+                    flight.getFlightNumber());
+
+            throw new ConflictException(
+                    "A turnaround plan already exists for flight: "
+                            + flight.getFlightNumber());
         }
 
         User supervisor = userRepository.findByEmail(supervisorId)
                 .orElseThrow(() -> {
-                    log.error("Failed to create plan: Supervisor not found with ID: {}", supervisorId);
+                    log.error("Failed to create plan: Supervisor not found with ID: {}",
+                            supervisorId);
                     return new ResourceNotFoundException("Supervisor not found");
                 });
 
@@ -76,26 +99,55 @@ public class TurnaroundService {
         plan.setStatus(TurnaroundStatus.Active);
 
         TurnaroundPlan savedPlan = planRepository.save(plan);
+
         log.debug("Turnaround plan entity saved with ID: {}", savedPlan.getPlanId());
 
-        // Auto-generate all 10 milestones with planned times based on scheduled arrival
-        List<TurnaroundMilestone> milestones = new ArrayList<>();
-        for (MilestoneType type : MilestoneType.values()) {
-            TurnaroundMilestone milestone = new TurnaroundMilestone();
-            milestone.setTurnaroundPlan(savedPlan);
-            milestone.setMilestoneType(type);
-            milestone.setPlannedTime(
-                    flight.getScheduledArrival().plusMinutes(SLA_OFFSETS.getOrDefault(type, 30)));
-            milestone.setStatus(MilestoneStatus.Pending);
-            milestones.add(milestone);
-        }
-        milestoneRepository.saveAll(milestones);
-        log.info("Successfully generated {} milestones for flight: {}", milestones.size(), flight.getFlightNumber());
+        HandlingRequestResponse handlingRequest =
+                handlingRequestService.getByFlight(request.getFlightId());
 
-        // Notify ramp officers
-        userRepository.findByRole(Role.RampOfficer).forEach(u ->
-                notificationService.sendNotification(u.getUserId(),
-                        "Turnaround plan created for flight " + flight.getFlightNumber(),
+        List<String> serviceTypes = Arrays.stream(
+                        handlingRequest.getServiceTypes().split(","))
+                .map(String::trim)
+                .toList();
+
+        Set<MilestoneType> requiredMilestones =
+                new LinkedHashSet<>(COMMON_MILESTONES);
+
+        for (String service : serviceTypes) {
+            List<MilestoneType> milestones =
+                    SERVICE_MILESTONES.get(service);
+
+            if (milestones != null) {
+                requiredMilestones.addAll(milestones);
+            }
+        }
+
+        List<TurnaroundMilestone> milestones = requiredMilestones.stream()
+                .map(type -> {
+                    TurnaroundMilestone milestone = new TurnaroundMilestone();
+
+                    milestone.setTurnaroundPlan(savedPlan);
+                    milestone.setMilestoneType(type);
+                    milestone.setPlannedTime(
+                            flight.getScheduledArrival()
+                                    .plusMinutes(SLA_OFFSETS.getOrDefault(type, 30))
+                    );
+                    milestone.setStatus(MilestoneStatus.Pending);
+
+                    return milestone;
+                })
+                .toList();
+
+        milestoneRepository.saveAll(milestones);
+
+        log.info("Successfully generated {} milestones for flight: {}",
+                milestones.size(), flight.getFlightNumber());
+
+        userRepository.findByRole(Role.RampOfficer).forEach(user ->
+                notificationService.sendNotification(
+                        user.getUserId(),
+                        "Turnaround plan created for flight "
+                                + flight.getFlightNumber(),
                         NotificationCategory.Turnaround));
 
         return toResponse(savedPlan, milestones);
@@ -196,6 +248,12 @@ public class TurnaroundService {
             throw new BadRequestException("Milestone is already completed");
         }
 
+        Flight flight = flightService.findById(request.getFlightId());
+        if(!flight.getStatus().equals(FlightStatus.Arrived)){
+            log.warn("Bad Request: Flight {} has not arrived yet. Current status: {}", flight.getFlightNumber(), flight.getStatus());
+            throw new BadRequestException("Cannot complete milestone for a flight that has not arrived");
+        }
+
         User completedBy = userRepository.findByEmail(completedByUserId)
                 .orElseThrow(() -> {
                     log.error("Milestone completion failed: User {} not found", completedByUserId);
@@ -250,7 +308,7 @@ public class TurnaroundService {
     }
 
     // Scheduled job: every 2 minutes, check for overdue pending milestones and fire alerts
-    @Scheduled(fixedDelay = 120_000)
+//    @Scheduled(fixedDelay = 120_000)
     @Transactional
     public void checkOverdueMilestones() {
         LocalDateTime now = LocalDateTime.now();
@@ -319,6 +377,7 @@ public class TurnaroundService {
         return TurnaroundMilestoneResponse.builder()
                 .milestoneId(m.getMilestoneId())
                 .planId(m.getTurnaroundPlan().getPlanId())
+                .flightId(m.getTurnaroundPlan().getFlight().getFlightId())
                 .milestoneType(m.getMilestoneType())
                 .plannedTime(m.getPlannedTime())
                 .actualTime(m.getActualTime())
