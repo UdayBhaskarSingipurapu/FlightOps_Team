@@ -81,6 +81,12 @@ public class PassengerService {
                 .stream().map(this::toCounterResponse).toList();
     }
 
+    public List<CheckInCounterResponse> getAllCountersAssignedByAgent(String userId){
+        log.debug("fetching all checking counters assigned by agent");
+        return counterRepository.findByAssignedAgentUserId(userId)
+                .stream().map(this::toCounterResponse).toList();
+    }
+
     public List<CheckInCounterResponse> getCountersByFlight(String flightId) {
         log.debug("Fetching check-in counters for flight ID {}", flightId);
         return counterRepository.findByFlight_FlightId(flightId)
@@ -155,6 +161,12 @@ public class PassengerService {
                 .stream().map(this::toGateResponse).toList();
     }
 
+    public List<BoardingGateResponse> getAllBoardingGatesAssignedByAgent(String userId){
+        log.debug("fetching all boarding gates assigned by agent");
+        return gateRepository.findByAssignedAgentUserId(userId)
+                .stream().map(this::toGateResponse).toList();
+    }
+
     public List<BoardingGateResponse> getGatesByFlight(String flightId) {
         log.debug("Fetching boarding gates for flight ID {}", flightId);
         return gateRepository.findByFlight_FlightId(flightId)
@@ -186,62 +198,46 @@ public class PassengerService {
 
     @Transactional
     public SpecialAssistanceResponse createAssistanceRequest(SpecialAssistanceRequest request) {
-        log.info("Creating special assistance request type '{}' for passenger '{}' on flight ID {}",
-                request.getAssistanceType(), request.getPassengerName(), request.getFlightId());
+        String userId = request.getUserId();
+        log.info("Creating special assistance request type '{}' for passenger '{}' on flight ID {} by agent ID {}",
+
+                request.getAssistanceType(), request.getPassengerName(), request.getFlightId(), userId);
 
         Flight flight = flightService.findById(request.getFlightId());
+        User agent = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Agent not found with ID: " + userId));
 
         SpecialAssistance assistance = new SpecialAssistance();
         assistance.setFlight(flight);
         assistance.setPassengerName(request.getPassengerName());
         assistance.setAssistanceType(request.getAssistanceType());
-        assistance.setStatus(AssistanceStatus.Requested);
 
-        SpecialAssistance saved = assistanceRepository.save(assistance);
-        log.info("Successfully created special assistance request ID {}", saved.getAssistanceId());
-
-        // Notify all passenger agents about new request
-        userRepository.findByRole(Role.PassengerAgent).forEach(u ->
-                notificationService.sendNotification(u.getUserId(),
-                        "Special assistance requested: " + request.getAssistanceType()
-                                + " for " + request.getPassengerName()
-                                + " on flight " + flight.getFlightNumber(),
-                        NotificationCategory.Passenger));
-
-        return toAssistanceResponse(saved);
-    }
-
-    public List<SpecialAssistanceResponse> getAllAssistanceRequests() {
-        log.debug("Fetching all special assistance requests ordered by status");
-        return assistanceRepository.findAllByOrderByStatusAsc()
-                .stream().map(this::toAssistanceResponse).toList();
-    }
-
-    @Transactional
-    public SpecialAssistanceResponse assignAgent(String assistanceId, AssistanceAssignRequest request) {
-        log.info("Assigning agent ID {} to assistance request ID {}", request.getAgentId(), assistanceId);
-        SpecialAssistance assistance = findAssistanceById(assistanceId);
-
-        if (assistance.getStatus() == AssistanceStatus.Completed) {
-            log.warn("Bad Request: Assistance request ID {} is already marked Completed", assistanceId);
-            throw new BadRequestException("This assistance request is already completed");
-        }
-
-        User agent = findAgent(request.getAgentId());
+        // Auto-assign the creator as the agent & mark as Assigned directly
         assistance.setAssignedAgent(agent);
         assistance.setStatus(AssistanceStatus.Assigned);
 
         SpecialAssistance saved = assistanceRepository.save(assistance);
-        log.info("Assistance request ID {} successfully updated to ASSIGNED status", assistanceId);
+        log.info("Successfully created and assigned special assistance request ID {}", saved.getAssistanceId());
 
-        // Notify the assigned agent
-        notificationService.sendNotification(agent.getUserId(),
-                "You have been assigned to assist passenger " + saved.getPassengerName()
-                        + " (" + saved.getAssistanceType() + ") on flight "
-                        + saved.getFlight().getFlightNumber(),
-                NotificationCategory.Passenger);
+        // Send a notification directly to the creating agent
+        notificationService.sendNotification(
+                agent.getUserId(),
+                "Assistance request created & assigned: " + request.getAssistanceType()
+                        + " for " + request.getPassengerName()
+                        + " on flight " + flight.getFlightNumber(),
+                NotificationCategory.Passenger
+        );
 
         return toAssistanceResponse(saved);
+    }
+
+    @Transactional
+    public List<SpecialAssistanceResponse> getAllAssistanceRequests() {
+        log.debug("Fetching all special assistance requests ordered by status");
+        return assistanceRepository.findAllByOrderByStatusAsc()
+                .stream()
+                .map(this::toAssistanceResponse)
+                .toList();
     }
 
     @Transactional
@@ -252,8 +248,7 @@ public class PassengerService {
         if (assistance.getStatus() != AssistanceStatus.Assigned) {
             log.warn("Bad Request: Assistance request ID {} is in '{}' status, must be 'Assigned' to complete.",
                     assistanceId, assistance.getStatus());
-            throw new BadRequestException(
-                    "Assistance must be Assigned before it can be marked complete");
+            throw new BadRequestException("Assistance must be Assigned before it can be marked complete");
         }
 
         assistance.setStatus(AssistanceStatus.Completed);
@@ -261,6 +256,11 @@ public class PassengerService {
         log.info("Assistance request ID {} successfully marked COMPLETED", assistanceId);
 
         return toAssistanceResponse(saved);
+    }
+
+
+    public List<SpecialAssistanceResponse> getAllAssistanceRequestsByUserId(String userId) {
+        return assistanceRepository.findByAssignedAgent_UserId(userId).stream().map(this::toAssistanceResponse).toList();
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
