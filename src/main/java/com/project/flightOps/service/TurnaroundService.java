@@ -1,21 +1,17 @@
 package com.project.flightOps.service;
 
-import com.project.flightOps.entity.Flight;
-import com.project.flightOps.entity.TurnaroundMilestone;
-import com.project.flightOps.entity.TurnaroundPlan;
-import com.project.flightOps.entity.User;
+import com.project.flightOps.entity.*;
 import com.project.flightOps.enums.*;
 import com.project.flightOps.exception.BadRequestException;
 import com.project.flightOps.exception.ConflictException;
 import com.project.flightOps.exception.ResourceNotFoundException;
+import com.project.flightOps.repository.BoardingGateRepository;
 import com.project.flightOps.repository.TurnaroundMilestoneRepository;
 import com.project.flightOps.repository.TurnaroundPlanRepository;
 import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.MilestoneCompleteRequest;
 import com.project.flightOps.requestdto.TurnaroundPlanRequest;
-import com.project.flightOps.responsedto.HandlingRequestResponse;
-import com.project.flightOps.responsedto.TurnaroundMilestoneResponse;
-import com.project.flightOps.responsedto.TurnaroundPlanResponse;
+import com.project.flightOps.responsedto.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // Added SLF4J Annotation
@@ -37,6 +33,7 @@ public class TurnaroundService {
     private final UserRepository userRepository;
     private final HandlingRequestService handlingRequestService;
     private final NotificationService notificationService;
+    private final  PassengerService passengerService;
 
     // Default SLA offset in minutes from scheduled arrival for each milestone
     private static final Map<MilestoneType, Integer> SLA_OFFSETS = Map.of(
@@ -198,6 +195,15 @@ public class TurnaroundService {
         // Compute actual turnaround minutes from ChocksOn to PushbackClearance
         List<TurnaroundMilestone> milestones =
                 milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(plan);
+
+        TurnaroundMilestone pushbackMilestone = milestones.stream()
+                .filter(m -> m.getMilestoneType() == MilestoneType.PushbackClearance)
+                .findFirst().orElse(null);
+        if(!pushbackMilestone.getStatus().equals(MilestoneStatus.Completed)){
+            log.warn("Bad Request: Cannot complete turnaround plan {} because PushbackClearance milestone is not completed", planId);
+            throw new BadRequestException("Cannot complete turnaround plan because PushbackClearance milestone is not completed");
+        }
+
         LocalDateTime chocksOnActual = milestones.stream()
                 .filter(m -> m.getMilestoneType() == MilestoneType.ChocksOn
                         && m.getActualTime() != null)
@@ -252,6 +258,21 @@ public class TurnaroundService {
         if(!flight.getStatus().equals(FlightStatus.Arrived)){
             log.warn("Bad Request: Flight {} has not arrived yet. Current status: {}", flight.getFlightNumber(), flight.getStatus());
             throw new BadRequestException("Cannot complete milestone for a flight that has not arrived");
+        }
+
+        if(milestone.getMilestoneType().equals(MilestoneType.BoardingComplete)){
+            List<BoardingGateResponse> allBoardingGatesForFlight = passengerService.getGatesByFlight(request.getFlightId());
+            List<SpecialAssistanceResponse> allSpecialAssistanceForFlight = passengerService.getAssistanceRequestsByFlight(request.getFlightId());
+            List<BoardingGateResponse> filteredGates = allBoardingGatesForFlight.stream()
+                    .filter(gate -> !gate.getStatus().equals(GateStatus.Closed))
+                    .toList();
+            List<SpecialAssistanceResponse> filteredAssistance = allSpecialAssistanceForFlight.stream()
+                    .filter(assistance -> !assistance.getStatus().equals(AssistanceStatus.Completed))
+                    .toList();
+            if(!filteredGates.isEmpty() || !filteredAssistance.isEmpty()){
+                log.warn("Bad Request: Cannot complete BoardingComplete milestone for flight {} because there are still open boarding gates or pending special assistance requests", flight.getFlightNumber());
+                throw new BadRequestException("Cannot complete BoardingComplete milestone while there are open boarding gates or pending special assistance requests");
+            }
         }
 
         User completedBy = userRepository.findByEmail(completedByUserId)

@@ -191,6 +191,19 @@ public class PassengerService {
                                     + " for flight " + saved.getFlight().getFlightNumber(),
                             NotificationCategory.Passenger));
         }
+
+        if(request.getStatus().equals(GateStatus.Closed)) {
+            userRepository.findByRole(Role.GroundSupervisor).forEach(u ->
+                    notificationService.sendNotification(u.getUserId(),
+                            "Gate " + saved.getGateNumber()
+                                    + " is now CLOSED for flight " + saved.getFlight().getFlightNumber(),
+                            NotificationCategory.Passenger));
+            userRepository.findByRole(Role.RampOfficer).forEach(u ->
+                    notificationService.sendNotification(u.getUserId(),
+                            "Gate " + saved.getGateNumber()
+                                    + " is now CLOSED for flight " + saved.getFlight().getFlightNumber(),
+                            NotificationCategory.Passenger));
+        }
         return toGateResponse(saved);
     }
 
@@ -261,6 +274,12 @@ public class PassengerService {
 
     public List<SpecialAssistanceResponse> getAllAssistanceRequestsByUserId(String userId) {
         return assistanceRepository.findByAssignedAgent_UserId(userId).stream().map(this::toAssistanceResponse).toList();
+    }
+
+    public List<SpecialAssistanceResponse> getAssistanceRequestsByFlight(String flightId) {
+        log.debug("Fetching special assistance requests for flight ID {}", flightId);
+        return assistanceRepository.findByFlight_FlightId(flightId)
+                .stream().map(this::toAssistanceResponse).toList();
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
