@@ -45,6 +45,15 @@ public class PassengerController {
         return ResponseEntity.ok(ApiResponse.success("Counters fetched", response));
     }
 
+    @GetMapping("/api/counters/byUser/{userId}")
+    @PreAuthorize("hasRole('PassengerAgent')")
+    public ResponseEntity<ApiResponse<List<CheckInCounterResponse>>> getCountersByUserId(@PathVariable String userId){
+        log.info("fetching all check-in counters assigned by passenger agent with id {}", userId);
+        List<CheckInCounterResponse> responses = passengerService.getAllCountersAssignedByAgent(userId);
+        log.debug("Fetched {} check-in counters assigned by agent", responses);
+        return ResponseEntity.ok(ApiResponse.success("Counter by agent fetched successfully", responses));
+    }
+
     @GetMapping("/api/counters/flight/{flightId}")
     public ResponseEntity<ApiResponse<List<CheckInCounterResponse>>> getByFlight(
             @PathVariable String flightId) {
@@ -85,6 +94,15 @@ public class PassengerController {
         List<BoardingGateResponse> response = passengerService.getAllGates();
         log.debug("Fetched {} boarding gates", response.size());
         return ResponseEntity.ok(ApiResponse.success("Gates fetched", response));
+    }
+
+    @GetMapping("/api/gates/byUser/{userId}")
+    @PreAuthorize("hasRole('PassengerAgent')")
+    public ResponseEntity<ApiResponse<List<BoardingGateResponse>>> getBoardingGatesByUserId(@PathVariable String userId){
+        log.info("fetching gates assigned by passenger agent with id {}", userId);
+        List<BoardingGateResponse> responses = passengerService.getAllBoardingGatesAssignedByAgent(userId);
+        log.debug("Fetched {} gates assigned by agent", responses);
+        return ResponseEntity.ok(ApiResponse.success("Counter by agent fetched successfully", responses));
     }
 
     @GetMapping("/api/gates/flight/{flightId}")
@@ -129,16 +147,13 @@ public class PassengerController {
         return ResponseEntity.ok(ApiResponse.success("Assistance requests fetched", response));
     }
 
-    @PatchMapping("/api/special-assistance/{id}/assign")
+    @GetMapping("/api/special-assistance/byUser/{userId}")
     @PreAuthorize("hasRole('PassengerAgent')")
-    public ResponseEntity<ApiResponse<SpecialAssistanceResponse>> assignAgent(
-            @PathVariable String id,
-            @Valid @RequestBody AssistanceAssignRequest request) {
-        // Fixed: Using the 'id' path variable instead of the missing getAgentName() getter
-        log.info("Processing agent assignment for assistance request ID: {}", id);
-        SpecialAssistanceResponse response = passengerService.assignAgent(id, request);
-        log.info("Successfully assigned agent to assistance request ID: {}", id);
-        return ResponseEntity.ok(ApiResponse.success("Agent assigned", response));
+    public ResponseEntity<ApiResponse<List<SpecialAssistanceResponse>>> getAllByUserId(@PathVariable String userId) {
+        log.info("Fetching all special assistance requests by user id {}", userId);
+        List<SpecialAssistanceResponse> response = passengerService.getAllAssistanceRequestsByUserId(userId);
+        log.debug("Fetched {} special assistance requests", response);
+        return ResponseEntity.ok(ApiResponse.success("Assistance requests fetched", response));
     }
 
     @PatchMapping("/api/special-assistance/{id}/complete")

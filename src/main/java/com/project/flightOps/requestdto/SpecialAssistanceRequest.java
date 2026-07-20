@@ -11,6 +11,9 @@ public class SpecialAssistanceRequest {
     @NotBlank(message = "Flight ID is required")
     private String flightId;
 
+    @NotBlank(message = "User ID is required")
+    private String userId;
+
     @NotBlank(message = "Passenger name is required")
     private String passengerName;
 
