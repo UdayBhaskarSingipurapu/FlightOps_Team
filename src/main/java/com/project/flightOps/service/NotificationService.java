@@ -131,9 +131,7 @@ public class NotificationService {
     public void dismiss(String notificationId) {
         log.info("Dismissing notification [{}]", notificationId);
 
-        Notification notification = findById(notificationId);
-        notification.setStatus(NotificationStatus.Dismissed);
-        notificationRepository.save(notification);
+        notificationRepository.deleteById(notificationId);
 
         log.debug("Notification [{}] successfully marked as DISMISSED", notificationId);
     }

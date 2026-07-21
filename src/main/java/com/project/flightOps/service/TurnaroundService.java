@@ -273,15 +273,19 @@ public class TurnaroundService {
         }
 
         if(milestone.getMilestoneType().equals(MilestoneType.BoardingComplete)){
+            List<CheckInCounterResponse> allCheckInCountersForFlight = passengerService.getCountersByFlight(request.getFlightId());
             List<BoardingGateResponse> allBoardingGatesForFlight = passengerService.getGatesByFlight(request.getFlightId());
             List<SpecialAssistanceResponse> allSpecialAssistanceForFlight = passengerService.getAssistanceRequestsByFlight(request.getFlightId());
+            List<CheckInCounterResponse> filteredCounters = allCheckInCountersForFlight.stream()
+                    .filter(ch -> !ch.getStatus().equals(CounterStatus.Closed))
+                    .toList();
             List<BoardingGateResponse> filteredGates = allBoardingGatesForFlight.stream()
                     .filter(gate -> !gate.getStatus().equals(GateStatus.Closed))
                     .toList();
             List<SpecialAssistanceResponse> filteredAssistance = allSpecialAssistanceForFlight.stream()
                     .filter(assistance -> !assistance.getStatus().equals(AssistanceStatus.Completed))
                     .toList();
-            if(!filteredGates.isEmpty() || !filteredAssistance.isEmpty()){
+            if(!filteredCounters.isEmpty() || !filteredGates.isEmpty() || !filteredAssistance.isEmpty()){
                 log.warn("Bad Request: Cannot complete BoardingComplete milestone for flight {} because there are still open boarding gates or pending special assistance requests", flight.getFlightNumber());
                 throw new BadRequestException("Cannot complete BoardingComplete milestone while there are open boarding gates or pending special assistance requests");
             }
