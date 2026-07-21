@@ -16,20 +16,24 @@ import com.project.flightOps.requestdto.HandlingStatusRequest;
 import com.project.flightOps.responsedto.HandlingRequestResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // 1. Added SLF4J import
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j // 2. Added Lombok annotation to auto-generate the 'log' variable
+@Slf4j
 public class HandlingRequestService {
+
+    private static final String ENTITY_TYPE = "HandlingRequest";
 
     private final HandlingRequestRepository handlingRequestRepository;
     private final FlightService flightService;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService; // 1. Injected AuditLogService
 
     @Transactional
     public HandlingRequestResponse create(HandlingRequestDto dto, String requestedByUserId) {
@@ -62,6 +66,9 @@ public class HandlingRequestService {
 
         HandlingRequest saved = handlingRequestRepository.save(request);
         log.info("Handling request successfully created with ID: {} for flight: {}", saved.getRequestId(), flight.getFlightNumber());
+
+        // 2. Audit Logging
+        auditLogService.log(requestedBy.getUserId(), "CREATED_HANDLING_REQUEST", ENTITY_TYPE);
 
         // Notify supervisors
         log.debug("Dispatching notifications to Ground Supervisors for new request: {}", saved.getRequestId());
@@ -118,6 +125,11 @@ public class HandlingRequestService {
         HandlingRequest saved = handlingRequestRepository.save(request);
         log.info("Successfully updated request ID: {} status from {} to {}", requestId, oldStatus, saved.getStatus());
 
+        // 3. Audit Logging
+        User currentUser = getCurrentUser();
+        String action = saved.getStatus() == RequestStatus.Completed ? "COMPLETED_HANDLING_REQUEST" : "UPDATED_HANDLING_REQUEST_STATUS";
+        auditLogService.log(currentUser.getUserId(), action, ENTITY_TYPE);
+
         // Notify coordinator about confirmation/rejection
         log.debug("Notifying coordinator (User ID: {}) regarding status update to {}", saved.getRequestedBy().getUserId(), saved.getStatus());
         notificationService.sendNotification(
@@ -127,6 +139,12 @@ public class HandlingRequestService {
                 NotificationCategory.FlightSchedule);
 
         return toResponse(saved);
+    }
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
     }
 
     private HandlingRequest findById(String id) {

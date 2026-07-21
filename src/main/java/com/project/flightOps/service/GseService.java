@@ -18,15 +18,19 @@ import com.project.flightOps.responsedto.EquipmentMaintenanceResponse;
 import com.project.flightOps.responsedto.GroundEquipmentResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Added for Logging
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Slf4j // Injects the 'log' field automatically via Lombok
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GseService {
+
+    private static final String ALLOCATION_ENTITY_TYPE = "EquipmentAllocation";
+    private static final String MAINTENANCE_ENTITY_TYPE = "EquipmentMaintenance";
 
     private final GroundEquipmentRepository equipmentRepository;
     private final EquipmentAllocationRepository allocationRepository;
@@ -34,6 +38,7 @@ public class GseService {
     private final FlightService flightService;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService; // Injected AuditLogService
 
     // ─── Equipment ──────────────────────────────────────────────────────────────
 
@@ -132,6 +137,9 @@ public class GseService {
         log.info("Successfully allocated Equipment {} to Flight {}. Allocation ID: {}",
                 equipment.getRegistrationNumber(), flight.getFlightNumber(), savedAllocation.getAllocationId());
 
+        // Audit Logging
+        auditLogService.log(allocatedBy.getUserId(), "CREATED_EQUIPMENT_ALLOCATION", ALLOCATION_ENTITY_TYPE);
+
         return toAllocationResponse(savedAllocation);
     }
 
@@ -165,6 +173,10 @@ public class GseService {
 
         EquipmentAllocation savedAllocation = allocationRepository.save(allocation);
         log.info("Successfully released Equipment {} from Allocation ID: {}", equipment.getRegistrationNumber(), allocationId);
+
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "RELEASED_EQUIPMENT_ALLOCATION", ALLOCATION_ENTITY_TYPE);
 
         return toAllocationResponse(savedAllocation);
     }
@@ -206,6 +218,9 @@ public class GseService {
         log.info("Maintenance logged successfully. Record ID: {} for Equipment: {}",
                 savedMaintenance.getMaintenanceId(), equipment.getRegistrationNumber());
 
+        // Audit Logging
+        auditLogService.log(reportedBy.getUserId(), "CREATED_EQUIPMENT_MAINTENANCE", MAINTENANCE_ENTITY_TYPE);
+
         return toMaintenanceResponse(savedMaintenance);
     }
 
@@ -235,10 +250,20 @@ public class GseService {
         log.info("Maintenance Record ID: {} resolved. Equipment {} is now Available.",
                 maintenanceId, equipment.getRegistrationNumber());
 
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "COMPLETED_EQUIPMENT_MAINTENANCE", MAINTENANCE_ENTITY_TYPE);
+
         return toMaintenanceResponse(savedMaintenance);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
+    }
 
     private GroundEquipment findEquipmentById(String id) {
         return equipmentRepository.findById(id)

@@ -15,15 +15,20 @@ import com.project.flightOps.responsedto.CheckInCounterResponse;
 import com.project.flightOps.responsedto.SpecialAssistanceResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // 1. Imported Slf4j
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j // 2. Added Lombok Slf4j annotation
+@Slf4j
 public class PassengerService {
+
+    private static final String COUNTER_ENTITY_TYPE = "CheckInCounter";
+    private static final String GATE_ENTITY_TYPE = "BoardingGate";
+    private static final String ASSISTANCE_ENTITY_TYPE = "SpecialAssistance";
 
     private final CheckInCounterRepository counterRepository;
     private final BoardingGateRepository gateRepository;
@@ -31,6 +36,7 @@ public class PassengerService {
     private final FlightService flightService;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService; // Injected AuditLogService
 
     // ─── Check-in Counters ──────────────────────────────────────────────────────
 
@@ -64,6 +70,12 @@ public class PassengerService {
 
         CheckInCounter saved = counterRepository.save(counter);
         log.info("Successfully assigned counter ID {} (Number: {}) to flight {}", saved.getCounterId(), saved.getCounterNumber(), flight.getFlightNumber());
+
+        // Audit Logging
+        String actorUserId = saved.getAssignedAgent() != null
+                ? saved.getAssignedAgent().getUserId()
+                : getCurrentUser().getUserId();
+        auditLogService.log(actorUserId, "ASSIGNED_CHECK_IN_COUNTER", COUNTER_ENTITY_TYPE);
 
         // Notify airline coordinator
         userRepository.findByRole(Role.AirlineCoordinator).forEach(u ->
@@ -102,6 +114,10 @@ public class PassengerService {
         counter.setStatus(request.getStatus());
         CheckInCounter saved = counterRepository.save(counter);
         log.debug("Counter ID {} shifted status from {} to {}", counterId, oldStatus, saved.getStatus());
+
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "UPDATED_CHECK_IN_COUNTER", COUNTER_ENTITY_TYPE);
 
         if(request.getStatus() == CounterStatus.Open) {
             userRepository.findByRole(Role.AirlineCoordinator).forEach(u ->
@@ -144,6 +160,12 @@ public class PassengerService {
         BoardingGate saved = gateRepository.save(gate);
         log.info("Successfully assigned gate ID {} (Number: {}) to flight {}", saved.getGateId(), saved.getGateNumber(), flight.getFlightNumber());
 
+        // Audit Logging
+        String actorUserId = saved.getAssignedAgent() != null
+                ? saved.getAssignedAgent().getUserId()
+                : getCurrentUser().getUserId();
+        auditLogService.log(actorUserId, "ASSIGNED_BOARDING_GATE", GATE_ENTITY_TYPE);
+
         // Notify ground supervisor and ramp officers about gate assignment
         List.of(Role.GroundSupervisor, Role.RampOfficer).forEach(role ->
                 userRepository.findByRole(role).forEach(u ->
@@ -183,6 +205,10 @@ public class PassengerService {
         BoardingGate saved = gateRepository.save(gate);
         log.debug("Gate ID {} shifted status from {} to {}", gateId, oldStatus, saved.getStatus());
 
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "UPDATED_BOARDING_GATE", GATE_ENTITY_TYPE);
+
         // Notify ramp officers when boarding starts
         if (request.getStatus() == GateStatus.Boarding) {
             userRepository.findByRole(Role.RampOfficer).forEach(u ->
@@ -213,7 +239,6 @@ public class PassengerService {
     public SpecialAssistanceResponse createAssistanceRequest(SpecialAssistanceRequest request) {
         String userId = request.getUserId();
         log.info("Creating special assistance request type '{}' for passenger '{}' on flight ID {} by agent ID {}",
-
                 request.getAssistanceType(), request.getPassengerName(), request.getFlightId(), userId);
 
         Flight flight = flightService.findById(request.getFlightId());
@@ -231,6 +256,9 @@ public class PassengerService {
 
         SpecialAssistance saved = assistanceRepository.save(assistance);
         log.info("Successfully created and assigned special assistance request ID {}", saved.getAssistanceId());
+
+        // Audit Logging
+        auditLogService.log(agent.getUserId(), "CREATED_SPECIAL_ASSISTANCE", ASSISTANCE_ENTITY_TYPE);
 
         // Send a notification directly to the creating agent
         notificationService.sendNotification(
@@ -268,9 +296,12 @@ public class PassengerService {
         SpecialAssistance saved = assistanceRepository.save(assistance);
         log.info("Assistance request ID {} successfully marked COMPLETED", assistanceId);
 
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "COMPLETED_SPECIAL_ASSISTANCE", ASSISTANCE_ENTITY_TYPE);
+
         return toAssistanceResponse(saved);
     }
-
 
     public List<SpecialAssistanceResponse> getAllAssistanceRequestsByUserId(String userId) {
         return assistanceRepository.findByAssignedAgent_UserId(userId).stream().map(this::toAssistanceResponse).toList();
@@ -283,6 +314,12 @@ public class PassengerService {
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
+    }
 
     private User findAgent(String agentId) {
         return userRepository.findById(agentId)
@@ -316,7 +353,7 @@ public class PassengerService {
                 });
     }
 
-    // ─── Mappers (Omitted logging here to prevent cluttering) ───────────────────
+    // ─── Mappers ────────────────────────────────────────────────────────────────
 
     private CheckInCounterResponse toCounterResponse(CheckInCounter c) {
         return CheckInCounterResponse.builder()

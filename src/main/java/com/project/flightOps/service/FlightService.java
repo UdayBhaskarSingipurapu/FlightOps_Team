@@ -16,7 +16,7 @@ import com.project.flightOps.requestdto.FlightStatusRequest;
 import com.project.flightOps.responsedto.FlightResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // 1. Imported Slf4j
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -25,13 +25,15 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j // 2. Added Lombok annotation to generate the 'log' instance
+@Slf4j
 public class FlightService {
+
+    private static final String ENTITY_TYPE = "Flight";
 
     private final FlightRepository flightRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
-
+    private final AuditLogService auditLogService; // Injected AuditLogService
 
     @Transactional
     public FlightResponse create(FlightRequest request) {
@@ -51,9 +53,7 @@ public class FlightService {
         }
 
         // 3. Validation: Current logged-in Admin's airport assignment check
-        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
-        User currentAdmin = userRepository.findByEmail(currentUsername)
-                .orElseThrow(() -> new ResourceNotFoundException("Authenticated admin profile not found"));
+        User currentAdmin = getCurrentUser();
 
         String adminAirportId = currentAdmin.getAirportId();
         if (adminAirportId == null || adminAirportId.trim().isEmpty()) {
@@ -101,6 +101,9 @@ public class FlightService {
         Flight saved = flightRepository.save(flight);
         log.info("Successfully created flight {} with ID: {}", saved.getFlightNumber(), saved.getFlightId());
 
+        // Audit Logging
+        auditLogService.log(currentAdmin.getUserId(), "CREATED_FLIGHT", ENTITY_TYPE);
+
         // Notify all coordinators and supervisors about new flight
         notifyRoles("New flight scheduled: " + saved.getFlightNumber()
                         + " arriving at " + saved.getScheduledArrival(),
@@ -136,7 +139,9 @@ public class FlightService {
     public FlightResponse update(String flightId, FlightRequest request) {
         log.info("Attempting to update flight ID: {}", flightId);
 
+        User currentUser = getCurrentUser();
         Flight flight = findById(flightId);
+
         if (request.getScheduledDeparture().isBefore(request.getScheduledArrival())) {
             log.warn("Flight update failed for ID {}: Departure time {} is before arrival time {}",
                     flightId, request.getScheduledDeparture(), request.getScheduledArrival());
@@ -156,11 +161,15 @@ public class FlightService {
         Flight updated = flightRepository.save(flight);
         log.info("Successfully updated flight ID: {}", flightId);
 
+        // Audit Logging
+        auditLogService.log(currentUser.getUserId(), "UPDATED_FLIGHT", ENTITY_TYPE);
+
         return toResponse(updated);
     }
 
     @Transactional
     public FlightResponse updateStatus(String flightId, FlightStatusRequest request) {
+        User currentUser = getCurrentUser();
         Flight flight = findById(flightId);
         FlightStatus oldStatus = flight.getStatus();
         FlightStatus newStatus = request.getStatus();
@@ -176,6 +185,10 @@ public class FlightService {
         flight.setStatus(newStatus);
         Flight saved = flightRepository.save(flight);
 
+        // Audit Logging
+        String action = newStatus == FlightStatus.Departed ? "COMPLETED_FLIGHT" : "UPDATED_FLIGHT_STATUS";
+        auditLogService.log(currentUser.getUserId(), action, ENTITY_TYPE);
+
         // Notify on status changes that affect ground ops
         if (newStatus == FlightStatus.Arrived) {
             notifyRoles("Flight " + saved.getFlightNumber() + " has arrived at stand " + saved.getStand(),
@@ -188,6 +201,12 @@ public class FlightService {
         }
 
         return toResponse(saved);
+    }
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
     }
 
     private void notifyRoles(String message, NotificationCategory category, List<Role> roles) {

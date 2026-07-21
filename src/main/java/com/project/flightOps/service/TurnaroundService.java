@@ -14,18 +14,22 @@ import com.project.flightOps.requestdto.TurnaroundPlanRequest;
 import com.project.flightOps.responsedto.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Added SLF4J Annotation
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
-@Slf4j // Enables the 'log' instance variable automatically
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TurnaroundService {
+
+    private static final String PLAN_ENTITY_TYPE = "TurnaroundPlan";
+    private static final String MILESTONE_ENTITY_TYPE = "TurnaroundMilestone";
 
     private final TurnaroundPlanRepository planRepository;
     private final TurnaroundMilestoneRepository milestoneRepository;
@@ -33,7 +37,8 @@ public class TurnaroundService {
     private final UserRepository userRepository;
     private final HandlingRequestService handlingRequestService;
     private final NotificationService notificationService;
-    private final  PassengerService passengerService;
+    private final PassengerService passengerService;
+    private final AuditLogService auditLogService; // Injected AuditLogService
 
     // Default SLA offset in minutes from scheduled arrival for each milestone
     private static final Map<MilestoneType, Integer> SLA_OFFSETS = Map.of(
@@ -140,6 +145,9 @@ public class TurnaroundService {
         log.info("Successfully generated {} milestones for flight: {}",
                 milestones.size(), flight.getFlightNumber());
 
+        // Audit Logging (using Supervisor User ID)
+        auditLogService.log(supervisor.getUserId(), "CREATED_TURNAROUND_PLAN", PLAN_ENTITY_TYPE);
+
         userRepository.findByRole(Role.RampOfficer).forEach(user ->
                 notificationService.sendNotification(
                         user.getUserId(),
@@ -227,6 +235,10 @@ public class TurnaroundService {
         TurnaroundPlan saved = planRepository.save(plan);
         log.info("Turnaround plan for flight {} successfully marked as COMPLETED", plan.getFlight().getFlightNumber());
 
+        // Audit Logging (using authenticated User ID)
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "COMPLETED_TURNAROUND_PLAN", PLAN_ENTITY_TYPE);
+
         // Notify coordinator
         notificationService.sendNotification(
                 plan.getSupervisor().getUserId(),
@@ -291,6 +303,9 @@ public class TurnaroundService {
         TurnaroundMilestone saved = milestoneRepository.save(milestone);
         TurnaroundPlan plan = milestone.getTurnaroundPlan();
 
+        // Audit Logging (using completedBy User ID)
+        auditLogService.log(completedBy.getUserId(), "COMPLETED_TURNAROUND_MILESTONE", MILESTONE_ENTITY_TYPE);
+
         if (delayed) {
             long delayMinutes = ChronoUnit.MINUTES.between(
                     milestone.getPlannedTime(), request.getActualTime());
@@ -329,7 +344,6 @@ public class TurnaroundService {
     }
 
     // Scheduled job: every 2 minutes, check for overdue pending milestones and fire alerts
-//    @Scheduled(fixedDelay = 120_000)
     @Transactional
     public void checkOverdueMilestones() {
         LocalDateTime now = LocalDateTime.now();
@@ -355,6 +369,12 @@ public class TurnaroundService {
                             + " is " + minutesLate + " min overdue",
                     NotificationCategory.Turnaround);
         });
+    }
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
     }
 
     private TurnaroundPlan findPlanById(String id) {

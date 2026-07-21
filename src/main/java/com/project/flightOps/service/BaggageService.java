@@ -22,7 +22,8 @@ import com.project.flightOps.responsedto.BaggageOperationResponse;
 import com.project.flightOps.responsedto.MishandledBaggageResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Added for logging
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -30,14 +31,18 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j // Added Lombok SLF4J annotation
+@Slf4j
 public class BaggageService {
+
+    private static final String OPERATION_ENTITY_TYPE = "BaggageOperation";
+    private static final String MISHANDLED_ENTITY_TYPE = "MishandledBaggage";
 
     private final BaggageOperationRepository baggageOperationRepository;
     private final MishandledBaggageRepository mishandledBaggageRepository;
     private final FlightService flightService;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService; // Injected AuditLogService
 
     // ─── Baggage Operations ─────────────────────────────────────────────────────
 
@@ -77,6 +82,9 @@ public class BaggageService {
         BaggageOperation saved = baggageOperationRepository.save(operation);
         log.info("Successfully created baggage operation with ID: {} for flight: {}",
                 saved.getOperationId(), flight.getFlightNumber());
+
+        // Audit Logging
+        auditLogService.log(operator.getUserId(), "CREATED_BAGGAGE_OPERATION", OPERATION_ENTITY_TYPE);
 
         return toOperationResponse(saved);
     }
@@ -149,7 +157,13 @@ public class BaggageService {
             operation.setStatus(OperationStatus.Completed);
         }
 
-        return toOperationResponse(baggageOperationRepository.save(operation));
+        BaggageOperation saved = baggageOperationRepository.save(operation);
+
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "COMPLETED_BAGGAGE_OPERATION", OPERATION_ENTITY_TYPE);
+
+        return toOperationResponse(saved);
     }
 
     // ─── Mishandled Baggage ─────────────────────────────────────────────────────
@@ -178,6 +192,10 @@ public class BaggageService {
 
         MishandledBaggage saved = mishandledBaggageRepository.save(mishandled);
         log.info("Mishandled baggage recorded with ID: {}", saved.getMishandleId());
+
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "REPORTED_MISHANDLED_BAGGAGE", MISHANDLED_ENTITY_TYPE);
 
         // Notify supervisors
         userRepository.findByRole(Role.GroundSupervisor).forEach(u -> {
@@ -227,10 +245,22 @@ public class BaggageService {
         }
 
         bag.setStatus(request.getStatus());
-        return toMishandledResponse(mishandledBaggageRepository.save(bag));
+        MishandledBaggage saved = mishandledBaggageRepository.save(bag);
+
+        // Audit Logging
+        User currentUser = getCurrentUser();
+        auditLogService.log(currentUser.getUserId(), "UPDATED_MISHANDLED_BAGGAGE", MISHANDLED_ENTITY_TYPE);
+
+        return toMishandledResponse(saved);
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
+
+    private User getCurrentUser() {
+        String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(currentUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user profile not found"));
+    }
 
     private BaggageOperation findOperationById(String id) {
         return baggageOperationRepository.findById(id)
