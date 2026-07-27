@@ -1,5 +1,6 @@
 package com.project.flightOps.controller;
 
+import com.project.flightOps.enums.RequestStatus;
 import com.project.flightOps.requestdto.HandlingRequestDto;
 import com.project.flightOps.requestdto.HandlingStatusRequest;
 import com.project.flightOps.responsedto.HandlingRequestResponse;
@@ -8,6 +9,7 @@ import com.project.flightOps.util.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // Added for logging
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,6 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -61,9 +64,11 @@ public class HandlingRequestController {
 
     @GetMapping("/byUser/{userId}")
     @PreAuthorize("hasAnyRole('AirlineCoordinator', 'GroundSupervisor')")
-    public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByUserId(@PathVariable String userId){
+    public ResponseEntity<ApiResponse<List<HandlingRequestResponse>>> getByUserId(@PathVariable String userId,
+            @RequestParam(required = false) RequestStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date){
         log.info("fetching handling requests filtered by userId {}", userId);
-        List<HandlingRequestResponse> response = handlingRequestService.getByUserId(userId);
+        List<HandlingRequestResponse> response = handlingRequestService.getRequestsForUserWithFilters(userId, status, date);
         log.info("Successfully fetched handling requests {} for userId {}", response, userId);
         return ResponseEntity.ok(ApiResponse.success("Handling requests fetched", response));
     }

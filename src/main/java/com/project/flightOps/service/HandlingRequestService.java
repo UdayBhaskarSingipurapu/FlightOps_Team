@@ -14,12 +14,18 @@ import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.HandlingRequestDto;
 import com.project.flightOps.requestdto.HandlingStatusRequest;
 import com.project.flightOps.responsedto.HandlingRequestResponse;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -99,6 +105,49 @@ public class HandlingRequestService {
     public List<HandlingRequestResponse> getByUserId(String userId) {
         log.debug("Fetching handling request details for ID: {}", userId);
         return handlingRequestRepository.findAllByRequestedByUserId(userId).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional
+    public List<HandlingRequestResponse> getRequestsForUserWithFilters(
+            String userId,
+            RequestStatus status,
+            LocalDate date
+    ) {
+        // Build Specification dynamically using CriteriaBuilder and Predicates
+        Specification<HandlingRequest> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // 1. Mandatory userId filter
+            if (userId != null && !userId.isBlank()) {
+                predicates.add(cb.equal(root.get("requestedBy").get("userId"), userId));
+            }
+
+            // 2. Optional status filter
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
+            }
+
+            // 3. Optional date filter (spans start of day to end of day)
+            if (date != null) {
+                LocalDateTime startOfDay = date.atStartOfDay();
+                LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+                predicates.add(cb.between(root.get("createdAt"), startOfDay, endOfDay));
+            }
+
+            // Order results by createdAt DESC
+            if (query != null) {
+                query.orderBy(cb.desc(root.get("createdAt")));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        // Execute query
+        List<HandlingRequest> requests = handlingRequestRepository.findAll(spec);
+
+        return requests.stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     public HandlingRequestResponse getByFlight(String flightId) {

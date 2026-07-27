@@ -338,7 +338,7 @@ public class TurnaroundService {
 
     public List<TurnaroundMilestoneResponse> getDelayedMilestones() {
         log.debug("Fetching all currently delayed milestones");
-        return milestoneRepository.findByStatusOrderByPlannedTimeAsc(MilestoneStatus.Delayed)
+        return milestoneRepository.findByStatusAndPlanStatusesForToday(MilestoneStatus.Delayed, List.of(TurnaroundStatus.Active, TurnaroundStatus.Delayed))
                 .stream().map(this::toMilestoneResponse).toList();
     }
 
@@ -347,7 +347,9 @@ public class TurnaroundService {
         return toMilestoneResponse(findMilestoneById(milestoneId));
     }
 
+
     // Scheduled job: every 2 minutes, check for overdue pending milestones and fire alerts
+    @Scheduled(fixedDelay = 120_000)
     @Transactional
     public void checkOverdueMilestones() {
         LocalDateTime now = LocalDateTime.now();
@@ -423,6 +425,7 @@ public class TurnaroundService {
                 .milestoneId(m.getMilestoneId())
                 .planId(m.getTurnaroundPlan().getPlanId())
                 .flightId(m.getTurnaroundPlan().getFlight().getFlightId())
+                .flightNumber(m.getTurnaroundPlan().getFlight().getFlightNumber())
                 .milestoneType(m.getMilestoneType())
                 .plannedTime(m.getPlannedTime())
                 .actualTime(m.getActualTime())

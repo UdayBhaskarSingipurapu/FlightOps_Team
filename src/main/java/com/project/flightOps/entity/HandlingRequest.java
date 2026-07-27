@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.CreatedDate;
+
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "handling_requests")
@@ -35,4 +38,13 @@ public class HandlingRequest {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RequestStatus status;
+
+    @CreatedDate
+    @Column(name = "request_created_date")
+    private LocalDate createdAt;
+
+    @PrePersist
+    public void onCreate(){
+        this.createdAt = LocalDate.now();
+    }
 }

@@ -13,6 +13,7 @@ public class TurnaroundMilestoneResponse {
     private String milestoneId;
     private String planId;
     private String flightId;
+    private String flightNumber;
     private MilestoneType milestoneType;
     private LocalDateTime plannedTime;
     private LocalDateTime actualTime;

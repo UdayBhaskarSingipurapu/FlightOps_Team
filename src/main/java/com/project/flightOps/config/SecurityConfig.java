@@ -97,7 +97,7 @@ public class SecurityConfig {
                         .hasRole("GroundSupervisor")
 
                         // ── Module 4: GSE ─────────────────────────────────────────────
-                        .requestMatchers(HttpMethod.POST,  "/api/equipment").hasRole("Admin")
+                        .requestMatchers(HttpMethod.POST,  "/api/equipment").hasAnyRole("Admin", "GSEManager")
                         .requestMatchers(HttpMethod.GET,   "/api/equipment").hasAnyRole("Admin", "GSEManager")
                         .requestMatchers(HttpMethod.GET,   "/api/equipment/{id}").hasRole("GSEManager")
                         .requestMatchers(HttpMethod.PATCH, "/api/equipment/{id}/status").hasRole("GSEManager")
