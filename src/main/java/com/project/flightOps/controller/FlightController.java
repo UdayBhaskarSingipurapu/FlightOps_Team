@@ -54,6 +54,14 @@ public class FlightController {
         return ResponseEntity.ok(ApiResponse.success("Flights fetched", result));
     }
 
+    @GetMapping("/allByHandlingService")
+    public ResponseEntity<ApiResponse<List<FlightResponse>>> getAllByHandlingRequestType(
+            @RequestParam(required = true) String serviceType
+    ) {
+        List<FlightResponse> responses = flightService.getAllFlightsWithHandlingRequestServiceType(serviceType);
+        return ResponseEntity.ok(ApiResponse.success("Flights fetched", responses));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<FlightResponse>> getById(@PathVariable String id) {
         log.info("Fetching flight details for ID: {}", id);

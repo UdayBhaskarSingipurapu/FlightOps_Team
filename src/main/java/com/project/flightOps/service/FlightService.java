@@ -1,15 +1,18 @@
 package com.project.flightOps.service;
 
 import com.project.flightOps.entity.Flight;
+import com.project.flightOps.entity.HandlingRequest;
 import com.project.flightOps.entity.User;
 import com.project.flightOps.enums.FlightStatus;
 import com.project.flightOps.enums.NotificationCategory;
+import com.project.flightOps.enums.RequestStatus;
 import com.project.flightOps.enums.Role;
 import com.project.flightOps.exception.BadRequestException;
 import com.project.flightOps.exception.ConflictException;
 import com.project.flightOps.exception.ForbiddenException;
 import com.project.flightOps.exception.ResourceNotFoundException;
 import com.project.flightOps.repository.FlightRepository;
+import com.project.flightOps.repository.HandlingRequestRepository;
 import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.FlightRequest;
 import com.project.flightOps.requestdto.FlightStatusRequest;
@@ -21,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -33,6 +37,7 @@ public class FlightService {
     private final FlightRepository flightRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final HandlingRequestRepository handlingRequestRepository;
     private final AuditLogService auditLogService; // Injected AuditLogService
 
     @Transactional
@@ -202,6 +207,30 @@ public class FlightService {
 
         return toResponse(saved);
     }
+
+
+    public List<FlightResponse> getAllFlightsWithHandlingRequestServiceType(String serviceType){
+        LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1).minusSeconds(1);
+
+        log.debug("Fetching today's flights between {} and {}", startOfDay, endOfDay);
+
+        List<Flight> todayFlights = flightRepository.findByScheduledArrivalBetweenOrderByScheduledArrivalAsc(startOfDay, endOfDay);
+
+        return todayFlights.stream()
+                .filter(f -> {
+                    HandlingRequest hr = handlingRequestRepository.findByFlight_FlightId(f.getFlightId());
+                    if (hr == null || hr.getServiceTypes() == null || !hr.getStatus().equals(RequestStatus.Confirmed)) {
+                        return false;
+                    }
+                    return Arrays.stream(hr.getServiceTypes().split(","))
+                            .map(String::trim)
+                            .anyMatch(serviceType::equalsIgnoreCase);
+                })
+                .map(this::toResponse)
+                .toList();
+    }
+
 
     private User getCurrentUser() {
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();

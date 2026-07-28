@@ -160,7 +160,15 @@ public class TurnaroundService {
 
     public List<TurnaroundPlanResponse> getActive() {
         log.debug("Fetching all active turnaround plans");
-        return planRepository.findByStatusOrderByStatusAsc(TurnaroundStatus.Active)
+        return planRepository.findByStatusOrderByCreatedAtAsc(TurnaroundStatus.Active)
+                .stream().map(p -> toResponse(p,
+                        milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(p)))
+                .toList();
+    }
+
+    public List<TurnaroundPlanResponse> getIncomplete(){
+        log.info("Fetching all turnaround plans where status is not COMPLETE");
+        return planRepository.findByStatusNotOrderByCreatedAtDesc(TurnaroundStatus.Completed)
                 .stream().map(p -> toResponse(p,
                         milestoneRepository.findByTurnaroundPlanOrderByPlannedTimeAsc(p)))
                 .toList();
@@ -349,7 +357,7 @@ public class TurnaroundService {
 
 
     // Scheduled job: every 2 minutes, check for overdue pending milestones and fire alerts
-    @Scheduled(fixedDelay = 120_000)
+//    @Scheduled(fixedDelay = 120_000)
     @Transactional
     public void checkOverdueMilestones() {
         LocalDateTime now = LocalDateTime.now();

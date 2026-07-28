@@ -46,10 +46,11 @@ public class TurnaroundController {
         log.info("Fetching turnaround plans. Filter activeOnly: {}", activeOnly);
 
         List<TurnaroundPlanResponse> result = activeOnly
-                ? turnaroundService.getActive()
+                ? turnaroundService.getIncomplete()
                 : turnaroundService.getAll();
         return ResponseEntity.ok(ApiResponse.success("Turnaround plans fetched", result));
     }
+
 
     @GetMapping("/api/turnarounds/{id}")
     public ResponseEntity<ApiResponse<TurnaroundPlanResponse>> getById(@PathVariable String id) {

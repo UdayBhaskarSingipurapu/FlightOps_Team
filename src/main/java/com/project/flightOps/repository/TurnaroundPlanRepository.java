@@ -16,7 +16,9 @@ public interface TurnaroundPlanRepository extends JpaRepository<TurnaroundPlan, 
 
     Optional<TurnaroundPlan> findByFlight_FlightId(String flightId);
 
-    List<TurnaroundPlan> findByStatusOrderByStatusAsc(TurnaroundStatus status);
+    List<TurnaroundPlan> findByStatusOrderByCreatedAtAsc(TurnaroundStatus status);
+
+    List<TurnaroundPlan> findByStatusNotOrderByCreatedAtDesc(TurnaroundStatus status);
 
     boolean existsByFlight(Flight flight);
 }

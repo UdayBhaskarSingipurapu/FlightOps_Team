@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -155,6 +156,19 @@ public class HandlingRequestService {
         HandlingRequest handlingRequest = handlingRequestRepository.findByFlight_FlightId(flightId);
         return toResponse(handlingRequest);
 
+    }
+
+    public boolean getWithServiceType(String flightId, String serviceType){
+        log.info("Checking if a flight with {} has handling request with services that includes {}", flightId, serviceType);
+        HandlingRequest handlingRequest = handlingRequestRepository.findByFlight_FlightId(flightId);
+        if(handlingRequest == null){
+            log.info("No handling request found for flight with id {}", flightId);
+            return false;
+        }
+        String[] serviceTypes = handlingRequest.getServiceTypes().split(",");
+        return Arrays.stream(handlingRequest.getServiceTypes().split(","))
+                .map(String::trim)
+                .anyMatch(serviceType::equalsIgnoreCase);
     }
 
     @Transactional

@@ -52,6 +52,11 @@ public class PassengerService {
                     + " is already in use for another flight");
         }
 
+        if(request.getCloseTime() != null && request.getCloseTime() == request.getOpenTime()){
+            log.info("Bad request: Counter open time {} and close time {} is same", request.getOpenTime(), request.getCloseTime());
+            throw new BadRequestException("Counter open time cannot be same as close time");
+        }
+
         Flight flight = flightService.findById(request.getFlightId());
 
         CheckInCounter counter = new CheckInCounter();
@@ -140,6 +145,11 @@ public class PassengerService {
             log.warn("Conflict detected: Gate {} is already in use", request.getGateNumber());
             throw new ConflictException("Gate " + request.getGateNumber()
                     + " is already in use for another flight");
+        }
+
+        if(request.getCloseTime() != null && request.getCloseTime() == request.getOpenTime()){
+            log.info("Bad request: Boarding gate open time {} and close time {} is same", request.getOpenTime(), request.getCloseTime());
+            throw new BadRequestException("Boarding gate open time cannot be same as close time");
         }
 
         Flight flight = flightService.findById(request.getFlightId());
