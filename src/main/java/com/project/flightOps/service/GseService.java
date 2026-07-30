@@ -155,6 +155,12 @@ public class GseService {
                 .stream().map(this::toAllocationResponse).toList();
     }
 
+    public List<EquipmentAllocationResponse> getAllActiveAllocationsByUser(String userId) {
+        log.debug("Fetching all active allocations by userId {}", userId);
+        return allocationRepository.findByStatusAndAllocatedBy_UserIdOrderByAllocationTimeDesc(AllocationStatus.Allocated, userId)
+                .stream().map(this::toAllocationResponse).toList();
+    }
+
     @Transactional
     public EquipmentAllocationResponse release(String allocationId) {
         log.info("Processing release for Allocation ID: {}", allocationId);

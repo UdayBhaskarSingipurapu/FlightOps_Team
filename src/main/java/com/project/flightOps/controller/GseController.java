@@ -120,6 +120,15 @@ public class GseController {
         return ResponseEntity.ok(ApiResponse.success("Active allocations fetched", response));
     }
 
+    @GetMapping("/api/allocations/user/{userId}")
+    @PreAuthorize("hasAnyRole('GSEManager', 'GroundSupervisor')")
+    public ResponseEntity<ApiResponse<List<EquipmentAllocationResponse>>> getActiveByUser(@PathVariable String userId) {
+        log.info("Fetching all active equipment allocations");
+        List<EquipmentAllocationResponse> response = gseService.getAllActiveAllocationsByUser(userId);
+        log.info("Successfully fetched {} active allocations", response.size());
+        return ResponseEntity.ok(ApiResponse.success("Active allocations fetched", response));
+    }
+
     @PatchMapping("/api/allocations/{id}/release")
     @PreAuthorize("hasRole('GSEManager')")
     public ResponseEntity<ApiResponse<EquipmentAllocationResponse>> release(@PathVariable String id) {

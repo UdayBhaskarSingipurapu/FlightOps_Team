@@ -215,7 +215,7 @@ public class TurnaroundService {
         TurnaroundMilestone pushbackMilestone = milestones.stream()
                 .filter(m -> m.getMilestoneType() == MilestoneType.PushbackClearance)
                 .findFirst().orElse(null);
-        if(!pushbackMilestone.getStatus().equals(MilestoneStatus.Completed)){
+        if(pushbackMilestone.getStatus().equals(MilestoneStatus.Pending)){
             log.warn("Bad Request: Cannot complete turnaround plan {} because PushbackClearance milestone is not completed", planId);
             throw new BadRequestException("Cannot complete turnaround plan because PushbackClearance milestone is not completed");
         }

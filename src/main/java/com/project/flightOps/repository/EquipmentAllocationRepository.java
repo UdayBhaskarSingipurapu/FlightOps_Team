@@ -15,6 +15,8 @@ public interface EquipmentAllocationRepository extends JpaRepository<EquipmentAl
 
     List<EquipmentAllocation> findByStatusOrderByAllocationTimeDesc(AllocationStatus status);
 
+    List<EquipmentAllocation> findByStatusAndAllocatedBy_UserIdOrderByAllocationTimeDesc(AllocationStatus status, String userId);
+
     boolean existsByEquipmentAndStatus(GroundEquipment equipment, AllocationStatus status);
 
     List<EquipmentAllocation> findByEquipment(GroundEquipment equipment);
