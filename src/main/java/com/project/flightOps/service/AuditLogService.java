@@ -7,10 +7,13 @@ import com.project.flightOps.repository.AuditLogRepository;
 import com.project.flightOps.repository.UserRepository;
 import com.project.flightOps.requestdto.AuditLogRequest;
 import com.project.flightOps.responsedto.AuditLogResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 1. Added SLF4J Import
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
@@ -68,12 +71,13 @@ public class AuditLogService {
         return response;
     }
 
-    // GET /api/audit?userId=&entityType=&from=&to=
-    public List<AuditLogResponse> query(String userEmail, String entityType,
-                                        LocalDateTime from, LocalDateTime to) {
+    // GET /api/audit?userId=&entityType=&from=&to=&page=&limit=
+    public PageResponse<AuditLogResponse> query(String userEmail, String entityType,
+                                        LocalDateTime from, LocalDateTime to,
+                                        int page, int limit) {
 
-        log.info("Processing combined audit log query with filters -> userEmail: {}, entityType: {}, from: {}, to: {}",
-                userEmail, entityType, from, to);
+        log.info("Processing combined audit log query with filters -> userEmail: {}, entityType: {}, from: {}, to: {}, page: {}, limit: {}",
+                userEmail, entityType, from, to, page, limit);
 
         Specification<AuditLog> spec = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -102,10 +106,14 @@ public class AuditLogService {
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
 
-        return auditLogRepository.findAll(spec)
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        int pageIndex = Math.max(page, 1) - 1;
+        Page<AuditLog> result = auditLogRepository.findAll(spec, PageRequest.of(pageIndex, limit));
+
+        return PageResponse.of(
+                result.getContent().stream().map(this::toResponse).toList(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                page);
     }
 
     private AuditLogResponse toResponse(AuditLog a) {

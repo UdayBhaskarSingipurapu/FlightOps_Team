@@ -4,6 +4,7 @@ import com.project.flightOps.requestdto.AuditLogRequest;
 import com.project.flightOps.responsedto.AuditLogResponse;
 import com.project.flightOps.service.AuditLogService;
 import com.project.flightOps.util.ApiResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 1. Imported Lombok's Slf4j logger
@@ -13,7 +14,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/audit")
@@ -38,23 +38,25 @@ public class AuditLogController {
         return ResponseEntity.ok(ApiResponse.success("Audit log recorded", response));
     }
 
-    // GET /api/audit?userId=&entityType=&from=2025-01-01T00:00:00&to=2025-01-31T23:59:59
+    // GET /api/audit?userId=&entityType=&from=2025-01-01T00:00:00&to=2025-01-31T23:59:59&page=1&limit=10
     @GetMapping
-    public ResponseEntity<ApiResponse<List<AuditLogResponse>>> query(
+    public ResponseEntity<ApiResponse<PageResponse<AuditLogResponse>>> query(
             @RequestParam(required = false) String userEmail,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int limit) {
 
         // Log incoming search parameters safely
-        log.info("REST request to query system audit logs. Filter criteria -> UserEmail: {}, EntityType: {}, From: {}, To: {}",
-                userEmail, entityType, from, to);
+        log.info("REST request to query system audit logs. Filter criteria -> UserEmail: {}, EntityType: {}, From: {}, To: {}, Page: {}, Limit: {}",
+                userEmail, entityType, from, to, page, limit);
 
-        List<AuditLogResponse> logs = auditLogService.query(userEmail, entityType, from, to);
+        PageResponse<AuditLogResponse> logs = auditLogService.query(userEmail, entityType, from, to, page, limit);
 
-        log.info("Successfully fetched {} audit log entries from database criteria match.", logs.size());
+        log.info("Successfully fetched {} of {} audit log entries matching criteria.", logs.getData().size(), logs.getTotalCount());
         return ResponseEntity.ok(ApiResponse.success("Audit logs fetched", logs));
     }
 }

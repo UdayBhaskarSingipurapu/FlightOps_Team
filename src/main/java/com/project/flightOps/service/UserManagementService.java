@@ -9,13 +9,14 @@ import com.project.flightOps.requestdto.CreateUserRequest;
 import com.project.flightOps.requestdto.UpdateUserRequest;
 import com.project.flightOps.requestdto.UserStatusRequest;
 import com.project.flightOps.responsedto.UserResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -49,11 +50,19 @@ public class UserManagementService {
         return toResponse(savedUser);
     }
 
-    public List<UserResponse> getAllUsers() {
-        log.debug("Fetching all users from the database");
-        List<User> users = userRepository.findAll();
-        log.info("Retrieved {} users", users.size());
-        return users.stream().map(this::toResponse).toList();
+    public PageResponse<UserResponse> getAllUsers(int page, int limit) {
+        int pageIndex = Math.max(page, 1) - 1;
+        log.debug("Fetching users page {} (limit {}) from the database", page, limit);
+
+        Page<User> result = userRepository.findAll(PageRequest.of(pageIndex, limit));
+        log.info("Retrieved {} of {} users (page {}/{})",
+                result.getNumberOfElements(), result.getTotalElements(), page, result.getTotalPages());
+
+        return PageResponse.of(
+                result.getContent().stream().map(this::toResponse).toList(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                page);
     }
 
     public UserResponse getUserById(String userId) {

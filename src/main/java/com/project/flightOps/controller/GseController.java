@@ -9,6 +9,7 @@ import com.project.flightOps.responsedto.EquipmentMaintenanceResponse;
 import com.project.flightOps.responsedto.GroundEquipmentResponse;
 import com.project.flightOps.service.GseService;
 import com.project.flightOps.util.ApiResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // Added for logging
@@ -46,10 +47,12 @@ public class GseController {
 
     @GetMapping("/api/equipment")
     @PreAuthorize("hasAnyRole('GSEManager', 'GroundSupervisor', 'Admin')")
-    public ResponseEntity<ApiResponse<List<GroundEquipmentResponse>>> getAllEquipments() {
-        log.info("Fetching complete ground equipment list");
-        List<GroundEquipmentResponse> response = gseService.getAllEquipment();
-        log.info("Successfully fetched {} equipment items", response.size());
+    public ResponseEntity<ApiResponse<PageResponse<GroundEquipmentResponse>>> getAllEquipments(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int limit) {
+        log.info("Fetching ground equipment list - page: {}, limit: {}", page, limit);
+        PageResponse<GroundEquipmentResponse> response = gseService.getAllEquipment(page, limit);
+        log.info("Successfully fetched {} of {} equipment items", response.getData().size(), response.getTotalCount());
         return ResponseEntity.ok(ApiResponse.success("Equipment list fetched", response));
     }
 

@@ -16,9 +16,12 @@ import com.project.flightOps.requestdto.GroundEquipmentRequest;
 import com.project.flightOps.responsedto.EquipmentAllocationResponse;
 import com.project.flightOps.responsedto.EquipmentMaintenanceResponse;
 import com.project.flightOps.responsedto.GroundEquipmentResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -61,9 +64,17 @@ public class GseService {
         return toEquipmentResponse(saved);
     }
 
-    public List<GroundEquipmentResponse> getAllEquipment() {
-        log.debug("Fetching all ground equipment");
-        return equipmentRepository.findAll().stream().map(this::toEquipmentResponse).toList();
+    public PageResponse<GroundEquipmentResponse> getAllEquipment(int page, int limit) {
+        int pageIndex = Math.max(page, 1) - 1;
+        log.debug("Fetching ground equipment page {} (limit {})", page, limit);
+
+        Page<GroundEquipment> result = equipmentRepository.findAll(PageRequest.of(pageIndex, limit));
+
+        return PageResponse.of(
+                result.getContent().stream().map(this::toEquipmentResponse).toList(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                page);
     }
 
     public GroundEquipmentResponse getEquipmentById(String id) {

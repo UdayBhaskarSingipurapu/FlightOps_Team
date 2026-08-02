@@ -6,6 +6,7 @@ import com.project.flightOps.requestdto.UserStatusRequest;
 import com.project.flightOps.responsedto.UserResponse;
 import com.project.flightOps.service.UserManagementService;
 import com.project.flightOps.util.ApiResponse;
+import com.project.flightOps.util.PageResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,8 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -40,12 +39,14 @@ public class UserManagementController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<UserResponse>>> getAll() {
-        log.info("Received request to fetch all users");
+    public ResponseEntity<ApiResponse<PageResponse<UserResponse>>> getAll(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int limit) {
+        log.info("Received request to fetch users - page: {}, limit: {}", page, limit);
 
-        List<UserResponse> users = userManagementService.getAllUsers();
+        PageResponse<UserResponse> users = userManagementService.getAllUsers(page, limit);
 
-        log.info("Successfully fetched {} users", users.size());
+        log.info("Successfully fetched {} of {} users", users.getData().size(), users.getTotalCount());
         return ResponseEntity.ok(ApiResponse.success("Users fetched", users));
     }
 
