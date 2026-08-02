@@ -186,6 +186,9 @@ public class FlightService {
                     String.format("Invalid status transition: Cannot change flight status from %s to %s", oldStatus, newStatus)
             );
         }
+        if(newStatus.equals(FlightStatus.Arrived)){
+            flight.setScheduledArrival(LocalDateTime.now());
+        }
 
         flight.setStatus(newStatus);
         Flight saved = flightRepository.save(flight);

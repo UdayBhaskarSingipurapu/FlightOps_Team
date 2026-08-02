@@ -52,7 +52,7 @@ public class PassengerService {
                     + " is already in use for another flight");
         }
 
-        if(request.getCloseTime() != null && request.getCloseTime() == request.getOpenTime()){
+        if(request.getCloseTime() != null && request.getCloseTime().equals(request.getOpenTime())){
             log.info("Bad request: Counter open time {} and close time {} is same", request.getOpenTime(), request.getCloseTime());
             throw new BadRequestException("Counter open time cannot be same as close time");
         }
@@ -147,7 +147,7 @@ public class PassengerService {
                     + " is already in use for another flight");
         }
 
-        if(request.getCloseTime() != null && request.getCloseTime() == request.getOpenTime()){
+        if(request.getCloseTime() != null && request.getCloseTime().equals(request.getOpenTime())){
             log.info("Bad request: Boarding gate open time {} and close time {} is same", request.getOpenTime(), request.getCloseTime());
             throw new BadRequestException("Boarding gate open time cannot be same as close time");
         }

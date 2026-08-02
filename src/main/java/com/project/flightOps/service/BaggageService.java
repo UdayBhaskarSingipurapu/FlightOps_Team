@@ -118,8 +118,13 @@ public class BaggageService {
             throw new BadRequestException("Bags processed (" + request.getTotalBagsProcessed()
                     + ") cannot exceed bags expected (" + operation.getTotalBagsExpected() + ")");
         }
-
-        operation.setTotalBagsProcessed(request.getTotalBagsProcessed());
+        int oldCount = operation.getTotalBagsProcessed();
+        if(oldCount + request.getTotalBagsProcessed() > operation.getTotalBagsExpected()){
+            log.info("Updated baggage count {} exceeding expected baggage count {}", oldCount + request.getTotalBagsProcessed(), operation.getTotalBagsExpected());
+            throw new BadRequestException("Bags processed (" + (request.getTotalBagsProcessed() + oldCount)
+                    + ") cannot exceed bags expected (" + operation.getTotalBagsExpected() + ")");
+        }
+        operation.setTotalBagsProcessed(oldCount + request.getTotalBagsProcessed());
         return toOperationResponse(baggageOperationRepository.save(operation));
     }
 
