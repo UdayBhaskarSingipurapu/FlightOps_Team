@@ -113,7 +113,7 @@ public class FlightService {
         notifyRoles("New flight scheduled: " + saved.getFlightNumber()
                         + " arriving at " + saved.getScheduledArrival(),
                 NotificationCategory.FlightSchedule,
-                List.of(Role.AirlineCoordinator, Role.GroundSupervisor));
+                List.of(Role.AirlineCoordinator, Role.GroundSupervisor, Role.PassengerAgent, Role.GSEManager, Role.RampOfficer));
 
         return toResponse(saved);
     }
@@ -205,7 +205,7 @@ public class FlightService {
         } else if (newStatus == FlightStatus.Delayed) {
             notifyRoles("Flight " + saved.getFlightNumber() + " is delayed",
                     NotificationCategory.FlightSchedule,
-                    List.of(Role.AirlineCoordinator, Role.GroundSupervisor));
+                    List.of(Role.AirlineCoordinator, Role.GroundSupervisor, Role.RampOfficer));
         }
 
         return toResponse(saved);
