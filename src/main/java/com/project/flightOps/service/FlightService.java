@@ -1,10 +1,7 @@
 package com.project.flightOps.service;
 
 import com.project.flightOps.entity.*;
-import com.project.flightOps.enums.FlightStatus;
-import com.project.flightOps.enums.NotificationCategory;
-import com.project.flightOps.enums.RequestStatus;
-import com.project.flightOps.enums.Role;
+import com.project.flightOps.enums.*;
 import com.project.flightOps.exception.BadRequestException;
 import com.project.flightOps.exception.ConflictException;
 import com.project.flightOps.exception.ForbiddenException;
@@ -22,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -278,9 +276,10 @@ public class FlightService {
         if(plan == null) return;
 
         List<TurnaroundMilestone> milestones = milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(plan.get().getPlanId());
+        Map<MilestoneType, Integer> offsets = TurnaroundService.SLA_OFFSETS;
         milestones = milestones.stream()
                 .map(milestone -> {
-                    milestone.setPlannedTime(flight.getScheduledArrival());
+                    milestone.setPlannedTime(flight.getScheduledArrival().plusMinutes(offsets.getOrDefault(milestone, 30)));
                     return milestone;
                 }).toList();
         milestoneRepository.saveAll(milestones);

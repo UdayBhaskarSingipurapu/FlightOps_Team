@@ -41,7 +41,7 @@ public class TurnaroundService {
     private final AuditLogService auditLogService; // Injected AuditLogService
 
     // Default SLA offset in minutes from scheduled arrival for each milestone
-    private static final Map<MilestoneType, Integer> SLA_OFFSETS = Map.of(
+    public static final Map<MilestoneType, Integer> SLA_OFFSETS = Map.of(
             MilestoneType.ChocksOn, 2,
             MilestoneType.StairsDocked, 5,
             MilestoneType.DoorOpen, 7,
@@ -54,7 +54,7 @@ public class TurnaroundService {
             MilestoneType.PushbackClearance, 60
     );
 
-    private static final List<MilestoneType> COMMON_MILESTONES = List.of(
+    public static final List<MilestoneType> COMMON_MILESTONES = List.of(
             MilestoneType.ChocksOn,
             MilestoneType.DoorOpen,
             MilestoneType.StairsDocked,
@@ -63,7 +63,7 @@ public class TurnaroundService {
             MilestoneType.PushbackClearance
     );
 
-    private static final Map<String, List<MilestoneType>> SERVICE_MILESTONES = Map.of(
+    public static final Map<String, List<MilestoneType>> SERVICE_MILESTONES = Map.of(
             "Baggage", List.of(MilestoneType.BaggageOffload),
             "Cleaning", List.of(MilestoneType.Cleaning),
             "Catering", List.of(MilestoneType.Catering),
