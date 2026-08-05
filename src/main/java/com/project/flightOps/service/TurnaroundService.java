@@ -48,7 +48,7 @@ public class TurnaroundService {
             MilestoneType.BaggageOffload, 25,
             MilestoneType.Cleaning, 35,
             MilestoneType.Catering, 40,
-            MilestoneType.Fuelling, 40,
+            MilestoneType.Fuelling, 45,
             MilestoneType.BoardingComplete, 55,
             MilestoneType.DoorClose, 58,
             MilestoneType.PushbackClearance, 60
@@ -234,12 +234,16 @@ public class TurnaroundService {
         if (chocksOnActual != null && pushbackActual != null) {
             int calculatedMinutes = (int) ChronoUnit.MINUTES.between(chocksOnActual, pushbackActual);
             plan.setActualTurnaroundMinutes(calculatedMinutes);
+            if(calculatedMinutes > plan.getTargetTurnaroundMinutes()){
+                plan.setStatus(TurnaroundStatus.Delayed);
+            }
+            else plan.setStatus(TurnaroundStatus.Completed);
             log.debug("Calculated actual turnaround time for plan {}: {} minutes", planId, calculatedMinutes);
         } else {
             log.warn("Could not calculate precise turnaround duration for plan {} because ChocksOn or PushbackClearance actual times were missing", planId);
         }
 
-        plan.setStatus(TurnaroundStatus.Completed);
+//        plan.setStatus(TurnaroundStatus.Completed);
         TurnaroundPlan saved = planRepository.save(plan);
         log.info("Turnaround plan for flight {} successfully marked as COMPLETED", plan.getFlight().getFlightNumber());
 
