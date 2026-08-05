@@ -38,6 +38,7 @@ public class FlightService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final HandlingRequestRepository handlingRequestRepository;
+    private final TurnaroundService turnaroundService;
     private final AuditLogService auditLogService; // Injected AuditLogService
 
     @Transactional
@@ -188,6 +189,7 @@ public class FlightService {
         }
         if(newStatus.equals(FlightStatus.Arrived)){
             flight.setScheduledArrival(LocalDateTime.now());
+            turnaroundService.updateMilestonesPlannedTimeWhenFlightArrived(flight);
         }
 
         flight.setStatus(newStatus);

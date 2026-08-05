@@ -43,8 +43,8 @@ public class TurnaroundService {
     // Default SLA offset in minutes from scheduled arrival for each milestone
     private static final Map<MilestoneType, Integer> SLA_OFFSETS = Map.of(
             MilestoneType.ChocksOn, 2,
-            MilestoneType.DoorOpen, 7,
             MilestoneType.StairsDocked, 5,
+            MilestoneType.DoorOpen, 7,
             MilestoneType.BaggageOffload, 25,
             MilestoneType.Cleaning, 35,
             MilestoneType.Catering, 40,
@@ -156,6 +156,19 @@ public class TurnaroundService {
                         NotificationCategory.Turnaround));
 
         return toResponse(savedPlan, milestones);
+    }
+
+    public void updateMilestonesPlannedTimeWhenFlightArrived(Flight flight){
+        Optional<TurnaroundPlan> plan = planRepository.findByFlight_FlightId(flight.getFlightId());
+        if(!plan.isPresent()) return;
+
+        List<TurnaroundMilestone> milestones = milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(plan.get().getPlanId());
+        milestones = milestones.stream()
+                .map(milestone -> {
+                    milestone.setPlannedTime(flight.getScheduledArrival());
+                    return milestone;
+                }).toList();
+        milestoneRepository.saveAll(milestones);
     }
 
     public List<TurnaroundPlanResponse> getActive() {
