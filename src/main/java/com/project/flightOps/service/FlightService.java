@@ -1,8 +1,6 @@
 package com.project.flightOps.service;
 
-import com.project.flightOps.entity.Flight;
-import com.project.flightOps.entity.HandlingRequest;
-import com.project.flightOps.entity.User;
+import com.project.flightOps.entity.*;
 import com.project.flightOps.enums.FlightStatus;
 import com.project.flightOps.enums.NotificationCategory;
 import com.project.flightOps.enums.RequestStatus;
@@ -11,9 +9,7 @@ import com.project.flightOps.exception.BadRequestException;
 import com.project.flightOps.exception.ConflictException;
 import com.project.flightOps.exception.ForbiddenException;
 import com.project.flightOps.exception.ResourceNotFoundException;
-import com.project.flightOps.repository.FlightRepository;
-import com.project.flightOps.repository.HandlingRequestRepository;
-import com.project.flightOps.repository.UserRepository;
+import com.project.flightOps.repository.*;
 import com.project.flightOps.requestdto.FlightRequest;
 import com.project.flightOps.requestdto.FlightStatusRequest;
 import com.project.flightOps.responsedto.FlightResponse;
@@ -26,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +35,8 @@ public class FlightService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final HandlingRequestRepository handlingRequestRepository;
-    private final TurnaroundService turnaroundService;
+    private final TurnaroundPlanRepository turnaroundPlanRepository;
+    private final TurnaroundMilestoneRepository milestoneRepository;
     private final AuditLogService auditLogService; // Injected AuditLogService
 
     @Transactional
@@ -189,7 +187,7 @@ public class FlightService {
         }
         if(newStatus.equals(FlightStatus.Arrived)){
             flight.setScheduledArrival(LocalDateTime.now());
-            turnaroundService.updateMilestonesPlannedTimeWhenFlightArrived(flight);
+            updateMilestonesPlannedTimeWhenFlightArrived(flight);
         }
 
         flight.setStatus(newStatus);
@@ -273,5 +271,18 @@ public class FlightService {
                 .stand(f.getStand())
                 .status(f.getStatus())
                 .build();
+    }
+
+    public void updateMilestonesPlannedTimeWhenFlightArrived(Flight flight){
+        Optional<TurnaroundPlan> plan = turnaroundPlanRepository.findByFlight_FlightId(flight.getFlightId());
+        if(plan == null) return;
+
+        List<TurnaroundMilestone> milestones = milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(plan.get().getPlanId());
+        milestones = milestones.stream()
+                .map(milestone -> {
+                    milestone.setPlannedTime(flight.getScheduledArrival());
+                    return milestone;
+                }).toList();
+        milestoneRepository.saveAll(milestones);
     }
 }

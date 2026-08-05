@@ -158,18 +158,6 @@ public class TurnaroundService {
         return toResponse(savedPlan, milestones);
     }
 
-    public void updateMilestonesPlannedTimeWhenFlightArrived(Flight flight){
-        Optional<TurnaroundPlan> plan = planRepository.findByFlight_FlightId(flight.getFlightId());
-        if(!plan.isPresent()) return;
-
-        List<TurnaroundMilestone> milestones = milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(plan.get().getPlanId());
-        milestones = milestones.stream()
-                .map(milestone -> {
-                    milestone.setPlannedTime(flight.getScheduledArrival());
-                    return milestone;
-                }).toList();
-        milestoneRepository.saveAll(milestones);
-    }
 
     public List<TurnaroundPlanResponse> getActive() {
         log.debug("Fetching all active turnaround plans");
