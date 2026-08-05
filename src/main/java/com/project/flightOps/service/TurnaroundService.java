@@ -234,17 +234,12 @@ public class TurnaroundService {
 
         if (chocksOnActual != null && pushbackActual != null) {
             int calculatedMinutes = (int) ChronoUnit.MINUTES.between(chocksOnActual, pushbackActual);
-            plan.setActualTurnaroundMinutes(calculatedMinutes);
-            if(calculatedMinutes > plan.getTargetTurnaroundMinutes()){
-                plan.setStatus(TurnaroundStatus.Delayed);
-            }
-            else plan.setStatus(TurnaroundStatus.Completed);
             log.debug("Calculated actual turnaround time for plan {}: {} minutes", planId, calculatedMinutes);
         } else {
             log.warn("Could not calculate precise turnaround duration for plan {} because ChocksOn or PushbackClearance actual times were missing", planId);
         }
 
-//        plan.setStatus(TurnaroundStatus.Completed);
+        plan.setStatus(TurnaroundStatus.Completed);
         TurnaroundPlan saved = planRepository.save(plan);
         log.info("Turnaround plan for flight {} successfully marked as COMPLETED", plan.getFlight().getFlightNumber());
 

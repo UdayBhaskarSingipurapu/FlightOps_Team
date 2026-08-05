@@ -53,7 +53,11 @@ public class AnalyticsService {
                         && p.getActualTurnaroundMinutes() <= p.getTargetTurnaroundMinutes())
                 .count();
         long delayed = allPlans.stream()
-                .filter(p -> p.getStatus() == TurnaroundStatus.Delayed).count();
+                .filter(p -> p.getStatus() == TurnaroundStatus.Completed
+                        && p.getActualTurnaroundMinutes() != null
+                        && p.getTargetTurnaroundMinutes() != null
+                        && p.getActualTurnaroundMinutes() > p.getTargetTurnaroundMinutes())
+                .count();
 
         double avgActual = allPlans.stream()
                 .filter(p -> p.getActualTurnaroundMinutes() != null)
