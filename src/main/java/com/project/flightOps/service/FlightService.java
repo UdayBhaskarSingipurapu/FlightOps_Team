@@ -279,7 +279,7 @@ public class FlightService {
         Map<MilestoneType, Integer> offsets = TurnaroundService.SLA_OFFSETS;
         milestones = milestones.stream()
                 .map(milestone -> {
-                    milestone.setPlannedTime(flight.getScheduledArrival().plusMinutes(offsets.getOrDefault(milestone, 30)));
+                    milestone.setPlannedTime(flight.getScheduledArrival().plusMinutes(offsets.getOrDefault(milestone.getMilestoneType(), 30)));
                     return milestone;
                 }).toList();
         milestoneRepository.saveAll(milestones);
