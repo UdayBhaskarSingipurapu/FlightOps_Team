@@ -65,7 +65,7 @@ public class AnalyticsService {
                 .average().orElse(0.0);
 
         double onTimeRate = total > 0 ? (onTime * 100.0 / total) : 0.0;
-        log.debug("Turnaround calculations completed. Total: {}, On-Time: {}, Delayed: {}", total, onTime, delayed);
+        log.info("Turnaround calculations completed. Total: {}, On-Time: {}, Delayed: {}", total, onTime, delayed);
 
         // GSE utilisation
         long totalEquip = equipmentRepository.count();

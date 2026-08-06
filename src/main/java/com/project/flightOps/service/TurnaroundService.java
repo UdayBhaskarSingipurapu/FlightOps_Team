@@ -234,6 +234,7 @@ public class TurnaroundService {
 
         if (chocksOnActual != null && pushbackActual != null) {
             int calculatedMinutes = (int) ChronoUnit.MINUTES.between(chocksOnActual, pushbackActual);
+            plan.setActualTurnaroundMinutes(calculatedMinutes);
             log.debug("Calculated actual turnaround time for plan {}: {} minutes", planId, calculatedMinutes);
         } else {
             log.warn("Could not calculate precise turnaround duration for plan {} because ChocksOn or PushbackClearance actual times were missing", planId);
