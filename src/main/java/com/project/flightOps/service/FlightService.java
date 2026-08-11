@@ -273,7 +273,7 @@ public class FlightService {
 
     public void updateMilestonesPlannedTimeWhenFlightArrived(Flight flight){
         Optional<TurnaroundPlan> plan = turnaroundPlanRepository.findByFlight_FlightId(flight.getFlightId());
-        if(plan == null) return;
+        if(plan.isEmpty()) return;
 
         List<TurnaroundMilestone> milestones = milestoneRepository.findByTurnaroundPlan_PlanIdOrderByPlannedTimeAsc(plan.get().getPlanId());
         Map<MilestoneType, Integer> offsets = TurnaroundService.SLA_OFFSETS;

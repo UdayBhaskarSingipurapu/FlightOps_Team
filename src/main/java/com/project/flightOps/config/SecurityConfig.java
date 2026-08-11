@@ -102,9 +102,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,   "/api/equipment/{id}").hasRole("GSEManager")
                         .requestMatchers(HttpMethod.PATCH, "/api/equipment/{id}/status").hasRole("GSEManager")
 
-                        .requestMatchers(HttpMethod.POST,  "/api/equipment-allocations").hasRole("GSEManager")
-                        .requestMatchers(HttpMethod.GET,   "/api/equipment-allocations").hasRole("GSEManager")
-                        .requestMatchers(HttpMethod.PATCH, "/api/equipment-allocations/{id}/release").hasRole("GSEManager")
+                        .requestMatchers(HttpMethod.POST,  "/api/allocations").hasRole("GSEManager")
+                        .requestMatchers(HttpMethod.GET,   "/api/allocations").hasRole("GSEManager")
+                        .requestMatchers(HttpMethod.PATCH, "/api/allocations/{id}/release").hasRole("GSEManager")
 
                         .requestMatchers(HttpMethod.POST,  "/api/equipment/{id}/maintenance").hasRole("GSEManager")
                         .requestMatchers(HttpMethod.GET,   "/api/equipment/{id}/maintenance").hasRole("GSEManager")
